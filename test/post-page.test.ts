@@ -226,9 +226,13 @@ describe('related layout', () => {
     expect(visibleThumbCount(900, 1)).toBe(5);
     expect(visibleThumbCount(900, 2)).toBe(10);
   });
-  it('splits at 900px', () => {
-    expect(isSplitLayout(899)).toBe(false);
-    expect(isSplitLayout(900)).toBe(true);
+  it('splits only when each half shows at least 3 thumbnails', () => {
+    // half = (w - 12) / 2; 3 thumbs need 3*150 + 2*6 = 462px
+    expect(isSplitLayout(935)).toBe(false); // half 461.5
+    expect(isSplitLayout(936)).toBe(true); // half 462
+    expect(isSplitLayout(600)).toBe(false);
+    expect(isSplitLayout(1400)).toBe(true);
+    expect(isSplitLayout(0)).toBe(false);
   });
 });
 

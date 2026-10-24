@@ -13,7 +13,7 @@ export default defineConfig({
       userscript: {
         name: 'RedGIFSbooru',
         namespace: 'https://github.com/redgifsbooru',
-        version: '0.5.0',
+        version: '0.5.1',
         description: 'An e621-style booru for RedGifs at /booru/posts. The rest of RedGifs is left alone.',
         author: 'RedGIFsbooru',
         match: ['https://www.redgifs.com/*', 'https://redgifs.com/*'],

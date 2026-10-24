@@ -229,7 +229,9 @@ export function availableMediaHeight(p: {
 
 export const THUMB_WIDTH = 150;
 export const THUMB_GAP = 6;
-export const SPLIT_MIN_WIDTH = 900;
+export const SPLIT_GAP = 12;
+/** Fewest thumbnails each half must show for the two related sections to go side by side. */
+export const SPLIT_MIN_THUMBS = 3;
 
 /** How many thumbnails fit side by side in a row of `width` px (at least 1). */
 export function thumbsPerRow(width: number, thumb = THUMB_WIDTH, gap = THUMB_GAP): number {
@@ -242,9 +244,13 @@ export function visibleThumbCount(width: number, rows = 1, thumb = THUMB_WIDTH, 
   return thumbsPerRow(width, thumb, gap) * Math.max(1, rows);
 }
 
-/** True when the two related sections go side by side. */
-export function isSplitLayout(columnWidth: number): boolean {
-  return columnWidth >= SPLIT_MIN_WIDTH;
+/**
+ * True when the two related sections go side by side: only if each half (the column minus the gap,
+ * divided by two) would still show at least SPLIT_MIN_THUMBS thumbnails. Otherwise they stack.
+ */
+export function isSplitLayout(columnWidth: number, gap = SPLIT_GAP): boolean {
+  if (!Number.isFinite(columnWidth) || columnWidth <= 0) return false;
+  return visibleThumbCount((columnWidth - gap) / 2) >= SPLIT_MIN_THUMBS;
 }
 
 // ---------------------------------------------------------------- tag order

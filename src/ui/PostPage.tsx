@@ -11,8 +11,9 @@ import { favoriteScore, sortPage } from '../search/match';
 import { distinctiveTags, formatAge } from './postHelpers';
 import { toTagTerm } from '../search/tags';
 import { getCategoryText, subscribeCategories } from '../store/categories';
-import { getSettings, subscribeSettings } from '../store/settings';
+import { getSettings, subscribeSettings, updateSettings } from '../store/settings';
 import { Columns } from './Columns';
+import { defaultStorage } from '../store/storage';
 import { downloadFile } from './download';
 import { findCached, pagePosts, rememberPage, runFill } from './fillers';
 import { formatCount, formatDuration, formatNicheName } from './format';
@@ -29,6 +30,11 @@ import {
   locateNeighbour,
   pickUnknownCounts,
   postTitle,
+  readPlayerPrefs,
+  SCALE_LABEL,
+  SCALE_MODES,
+  updatePlayerPrefs,
+  type ScaleMode,
   redgifsWatchUrl,
   resolveNeighbour,
   sourceFromSrc,
@@ -94,10 +100,15 @@ export function PostPage({ api, router, tagCounts, route }: Props) {
     if (lookupKeys.length) tagCounts.request(lookupKeys);
   }, [gif?.id, tagCounts]);
 
-  // "Always show related posts": the media gets the height left under the header, with the scale
-  // bar, description, prev/next bar and related rows still on screen. Measured, not guessed.
+  // "Always show related posts": the media gets the height left under the header, with the
+  // description, prev/next bar and related rows still on screen. Measured, not guessed.
   useSubscription(subscribeSettings);
   const showRelatedBelow = getSettings().showRelatedBelow;
+  const [scale, setScale] = useState<ScaleMode>(() => readPlayerPrefs(defaultStorage()).scale);
+  const chooseScale = (mode: ScaleMode) => {
+    setScale(mode);
+    updatePlayerPrefs({ scale: mode }, defaultStorage());
+  };
   const playerHost = useRef<HTMLDivElement>(null);
   const belowRef = useRef<HTMLDivElement>(null);
   const [maxHeight, setMaxHeight] = useState<number | null>(null);
@@ -107,11 +118,10 @@ export function PostPage({ api, router, tagCounts, route }: Props) {
     const below = belowRef.current;
     if (!host || !below) return;
     const measure = () => {
-      const bar = host.querySelector<HTMLElement>('.rgb-scalebar');
       setMaxHeight(availableMediaHeight({
         viewportHeight: window.innerHeight,
         above: host.getBoundingClientRect().top + window.scrollY,
-        bar: bar ? bar.offsetHeight + 4 : 0,
+        bar: 0,
         below: below.offsetHeight,
         // 2 border + 8 under the player + the margins around the prev/next bar and rows.
         margin: 40,
@@ -127,7 +137,7 @@ export function PostPage({ api, router, tagCounts, route }: Props) {
     };
   }, [showRelatedBelow, gif?.id]);
 
-  const sidebar = gif ? <PostSidebar gif={gif} route={route} tagCounts={tagCounts} pipeline={pipeline} lookupKeys={lookupKeys} /> : null;
+  const sidebar = gif ? <PostSidebar gif={gif} route={route} tagCounts={tagCounts} pipeline={pipeline} lookupKeys={lookupKeys} scale={scale} onScale={chooseScale} showRelatedBelow={showRelatedBelow} /> : null;
 
   return (
     <Columns api={api} router={router} tagCounts={tagCounts} route={route} sidebar={sidebar}>
@@ -143,7 +153,7 @@ export function PostPage({ api, router, tagCounts, route }: Props) {
       {gif && (
         <>
           <div ref={playerHost}>
-            <Player key={gif.id} gif={gif} maxHeight={showRelatedBelow ? maxHeight : null} />
+            <Player key={gif.id} gif={gif} maxHeight={showRelatedBelow ? maxHeight : null} scale={scale} onScale={chooseScale} />
           </div>
           <div ref={belowRef}>
             {gif.description && <p class="rgb-description">{gif.description}</p>}
@@ -334,9 +344,12 @@ function Related({ api, tagCounts, gif, pipeline, route, lookupKeys }: {
   }, [api, gif.id]);
 
   // Side by side when the main column is wide enough, stacked otherwise.
+  // Only when both sections have posts, and each half would show at least 3 thumbnails.
   const [wrapRef, wrapWidth] = useElementWidth();
+  const present = (r: RowState) => r.kind === 'loading' || (r.kind === 'ok' && r.gifs.length > 0);
+  const split = present(creator) && present(related) && isSplitLayout(wrapWidth);
   return (
-    <div class={`rgb-relatedwrap${isSplitLayout(wrapWidth) ? ' split' : ''}`} ref={wrapRef}>
+    <div class={`rgb-relatedwrap${split ? ' split' : ''}`} ref={wrapRef}>
       <Row
         title={<a href={`/booru/users/${encodeURIComponent(gif.userName)}`}>{`More from ${gif.userName}`}</a>}
         state={creator}
@@ -366,12 +379,15 @@ function Row({ title, state, route }: { title: ComponentChildren; state: RowStat
 
 // ---------------------------------------------------------------- sidebar
 
-function PostSidebar({ gif, route, tagCounts, pipeline, lookupKeys }: {
+function PostSidebar({ gif, route, tagCounts, pipeline, lookupKeys, scale, onScale, showRelatedBelow }: {
   gif: Gif;
   route: PostRoute;
   tagCounts: TagCounts;
   pipeline: SearchPipeline;
   lookupKeys: string[];
+  scale: ScaleMode;
+  onScale: (mode: ScaleMode) => void;
+  showRelatedBelow: boolean;
 }) {
   const categoriesVersion = useSubscription(subscribeCategories);
   const userCategories = useMemo(() => parseCategoryText(getCategoryText()), [categoriesVersion]);
@@ -423,6 +439,7 @@ function PostSidebar({ gif, route, tagCounts, pipeline, lookupKeys }: {
         ))}
       </section>
       <InfoSection gif={gif} />
+      <DisplaySection scale={scale} onScale={onScale} showRelatedBelow={showRelatedBelow} />
       <OptionsSection gif={gif} />
       {gif.niches?.length > 0 && (
         <section>
@@ -477,6 +494,37 @@ function InfoSection({ gif }: { gif: Gif }) {
           <tr><th>Type</th><td>{gif.type === 2 ? 'image' : 'video'}</td></tr>
         </tbody>
       </table>
+    </section>
+  );
+}
+
+function DisplaySection({ scale, onScale, showRelatedBelow }: {
+  scale: ScaleMode;
+  onScale: (mode: ScaleMode) => void;
+  showRelatedBelow: boolean;
+}) {
+  return (
+    <section>
+      <h2>Display</h2>
+      <ul class="rgb-list rgb-display" aria-label="Media size">
+        {SCALE_MODES.map((mode) => (
+          <li key={mode}>
+            {mode === scale
+              ? <b aria-current="true">{SCALE_LABEL[mode]}</b>
+              : <button type="button" class="link-btn" onClick={() => onScale(mode)}>{SCALE_LABEL[mode]}</button>}
+          </li>
+        ))}
+        <li>
+          <label>
+            <input
+              type="checkbox"
+              checked={showRelatedBelow}
+              onChange={(e) => updateSettings({ showRelatedBelow: e.currentTarget.checked })}
+            />
+            {' '}Always show related posts
+          </label>
+        </li>
+      </ul>
     </section>
   );
 }

@@ -243,8 +243,6 @@ button.link-btn:hover { background: none; text-decoration: underline; }
 .rgb-options button.link-btn { font: inherit; }
 
 .rgb-playerwrap { margin: 0 0 8px; }
-.rgb-scalebar { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 0 0 4px; font-size: 0.85em; }
-.rgb-scalebar .active { color: var(--text); font-weight: bold; text-decoration: none; cursor: default; }
 .rgb-player { display: block; overflow-x: auto; text-align: center; background: var(--panel); border: 1px solid var(--accent); }
 .rgb-player video, .rgb-player img { display: block; margin: 0 auto; max-width: none; }
 .rgb-player img.fit { cursor: zoom-in; }
@@ -256,7 +254,8 @@ button.link-btn:hover { background: none; text-decoration: underline; }
 .rgb-postnav .sep { color: var(--muted); }
 .rgb-postnav .query { word-break: break-word; }
 
-.rgb-relatedwrap { display: flex; gap: 12px; align-items: flex-start; }
+.rgb-relatedwrap { display: flex; flex-direction: column; gap: 0; }
+.rgb-relatedwrap.split { flex-direction: row; gap: 12px; align-items: flex-start; }
 .rgb-relatedwrap > .rgb-related { flex: 1 1 0; min-width: 0; }
 .rgb-related { margin-bottom: 12px; }
 .rgb-related h2 { background: var(--header); padding: 3px 8px; border: 1px solid var(--accent); margin-bottom: 6px; }
@@ -265,3 +264,5 @@ button.link-btn:hover { background: none; text-decoration: underline; }
 
 .rgb-settings h3 { font-size: 0.95em; margin: 6px 0 2px; }
 .rgb-cat-tags { font-size: 0.85em; }
+
+.rgb-display b { color: var(--text); }

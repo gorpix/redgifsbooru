@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Gif } from '../api/types';
 import { defaultStorage } from '../store/storage';
-import {
-  SCALE_LABEL,
-  SCALE_MODES,
-  fitSize,
-  readPlayerPrefs,
-  updatePlayerPrefs,
-  type ScaleMode,
-} from './postPageHelpers';
+import { fitSize, readPlayerPrefs, updatePlayerPrefs, type ScaleMode } from './postPageHelpers';
 
 /** Width of an element, kept up to date with a ResizeObserver (0 until measured). */
 export function useElementWidth(): [(el: HTMLElement | null) => void, number] {
@@ -40,15 +33,14 @@ interface PlayerProps {
   gif: Gif;
   /** Tallest the media may be in Fit / Fit height modes; null = 85% of the viewport. */
   maxHeight?: number | null;
+  /** Current scale mode (chosen in the sidebar's Display section) and how to change it. */
+  scale: ScaleMode;
+  onScale: (mode: ScaleMode) => void;
 }
 
-/** The post's media with its scale bar. Key it by post id so navigating to another post resets it. */
-export function Player({ gif, maxHeight = null }: PlayerProps) {
-  const [scale, setScale] = useState<ScaleMode>(() => readPlayerPrefs(defaultStorage()).scale);
-  const choose = (mode: ScaleMode) => {
-    setScale(mode);
-    updatePlayerPrefs({ scale: mode }, defaultStorage());
-  };
+/** The post's media. Key it by post id so navigating to another post resets it. */
+export function Player({ gif, maxHeight = null, scale, onScale }: PlayerProps) {
+  const choose = onScale;
   const [boxRef, boxWidth] = useElementWidth();
   const viewport = useViewportHeight();
   const boxHeight = maxHeight ?? Math.round(viewport * 0.85);
@@ -57,19 +49,6 @@ export function Player({ gif, maxHeight = null }: PlayerProps) {
 
   return (
     <div class="rgb-playerwrap">
-      <div class="rgb-scalebar" role="group" aria-label="Media size">
-        {SCALE_MODES.map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            class={`link-btn${mode === scale ? ' active' : ''}`}
-            aria-pressed={mode === scale}
-            onClick={() => choose(mode)}
-          >
-            {SCALE_LABEL[mode]}
-          </button>
-        ))}
-      </div>
       <div class={`rgb-player${gif.type === 2 ? ' image' : ''}`} ref={boxRef}>
         {gif.type === 2
           ? <ImagePlayer gif={gif} original={scale === 'original'} style={style} onToggle={() => choose(scale === 'original' ? 'fit' : 'original')} />
