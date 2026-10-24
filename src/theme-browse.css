@@ -1,0 +1,79 @@
+/* Phase 4 pages: wiki, creators, pools, popular. Appended after theme.css. */
+
+.rgb-section {
+  font-size: 1em;
+  margin: 10px 0 6px;
+  background: var(--header);
+  padding: 3px 8px;
+  border: 1px solid var(--accent);
+}
+
+/* Sidebar tag rows: the wiki "?" is now a link. */
+.rgb-tags a.wiki { cursor: pointer; }
+.rgb-tags a.wiki:hover { color: var(--link); opacity: 1; text-decoration: none; }
+
+/* Popular tabs */
+.rgb-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 8px;
+  border-bottom: 1px solid var(--accent);
+}
+.rgb-tabs a { padding: 3px 12px; }
+.rgb-tabs a.active { background: var(--accent); color: var(--text); }
+.rgb-tabs .rgb-spacer { flex: 1; }
+
+/* Creator profile */
+.rgb-profile {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 0 8px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+}
+.rgb-avatar { width: 96px; height: 96px; object-fit: cover; border-radius: 4px; flex: 0 0 auto; }
+.rgb-profile-body { min-width: 0; }
+.rgb-profile-name { font-size: 1.2em; font-weight: bold; margin: 0 0 4px; word-break: break-word; }
+.rgb-verified { color: #6fc3ff; }
+.rgb-profile-bio { white-space: pre-wrap; word-break: break-word; margin: 0 0 6px; }
+.rgb-profile-stats { margin: 0 0 4px; font-size: 0.9em; }
+.rgb-profile-links { margin: 0; font-size: 0.9em; word-break: break-all; }
+
+/* Pools */
+.rgb-pools { border-collapse: collapse; width: 100%; margin: 0 0 8px; }
+.rgb-pools th { text-align: left; background: var(--header); padding: 3px 8px; border-bottom: 1px solid var(--accent); }
+.rgb-pools td { padding: 3px 8px; border-bottom: 1px solid var(--header); vertical-align: middle; }
+.rgb-pools .num { text-align: right; white-space: nowrap; }
+.rgb-pools .thumb-col { width: 56px; padding: 3px 8px; }
+.rgb-pools .thumb-col img { display: block; width: 48px; height: 48px; object-fit: cover; border-radius: 3px; }
+.rgb-pool-head { margin: 0 0 8px; }
+.rgb-pool-desc { white-space: pre-wrap; word-break: break-word; }
+.rgb-pool-rules { margin: 0 0 8px; }
+.rgb-pool-rules summary { cursor: pointer; }
+.rgb-pool-rules ol { margin: 4px 0 0; padding-left: 22px; }
+.rgb-pool-tags { font-size: 0.9em; }
+
+/* Wiki */
+.rgb-wiki-info { width: auto; min-width: 260px; margin: 0 0 8px; }
+.rgb-wiki-info th { padding-right: 16px; vertical-align: top; }
+.rgb-wiki-desc { white-space: pre-wrap; word-break: break-word; margin: 0 0 10px; max-width: 70ch; }
+.rgb-wiki-section { margin: 0 0 12px; }
+.rgb-wiki-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  columns: 200px;
+  column-gap: 16px;
+  font-size: 0.9em;
+}
+.rgb-wiki-list li { display: flex; gap: 8px; justify-content: space-between; break-inside: avoid; line-height: 1.5; }
+.rgb-wiki-list .count { color: var(--muted); font-size: 0.85em; }
+.rgb-wiki-group { margin: 0 0 6px; }
+.rgb-wiki-group summary { cursor: pointer; font-weight: bold; margin: 0 0 4px; }
+
+@media (max-width: 800px) {
+  .rgb-profile { flex-direction: column; }
+}
