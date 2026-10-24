@@ -3,9 +3,10 @@ import preact from '@preact/preset-vite';
 import monkey from 'vite-plugin-monkey';
 
 const SERVE_ROOT = 'http://127.0.0.1:8778';
+const PUBLIC_ROOT = 'https://github.com/gorpix/redgifsbooru/releases/latest/download';
 const FILE_NAME = 'redgifsbooru.user.js';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     preact(),
     monkey({
@@ -13,7 +14,7 @@ export default defineConfig({
       userscript: {
         name: 'RedGIFSbooru',
         namespace: 'https://github.com/redgifsbooru',
-        version: '0.5.1',
+        version: '0.5.2',
         description: 'An e621-style booru for RedGifs at /booru/posts. The rest of RedGifs is left alone.',
         author: 'RedGIFsbooru',
         license: 'GPL-3.0-or-later',
@@ -21,8 +22,8 @@ export default defineConfig({
         'run-at': 'document-start',
         grant: ['GM_xmlhttpRequest', 'GM_download'],
         connect: ['api.redgifs.com', 'media.redgifs.com'],
-        updateURL: `${SERVE_ROOT}/${FILE_NAME}`,
-        downloadURL: `${SERVE_ROOT}/${FILE_NAME}`,
+        updateURL: `${mode === 'dev' ? SERVE_ROOT : PUBLIC_ROOT}/${FILE_NAME}`,
+        downloadURL: `${mode === 'dev' ? SERVE_ROOT : PUBLIC_ROOT}/${FILE_NAME}`,
         noframes: true,
       },
       build: {
@@ -36,4 +37,4 @@ export default defineConfig({
   build: {
     minify: false,
   },
-});
+}));

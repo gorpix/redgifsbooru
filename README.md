@@ -15,20 +15,22 @@ An e621-style booru front end for RedGifs, as a userscript. It replaces RedGifs'
 
 ## Install
 
-Requirements: Firefox with Tampermonkey. Other browsers and userscript managers are untested.
+Install the Tampermonkey browser extension (tested in Firefox; other browsers and userscript managers are untested).
 
-Build from source:
+**[Install RedGIFsbooru](https://github.com/gorpix/redgifsbooru/releases/latest/download/redgifsbooru.user.js)**. Tampermonkey opens its install page; click Install. Updates arrive automatically from the latest release.
+
+Then open https://www.redgifs.com/booru/posts.
+
+Disable other RedGifs userscripts on `/booru` pages, or they may conflict with this one.
+
+### Build from source
 
 ```
 npm ci
 npm run build
 ```
 
-Then install `dist/redgifsbooru.user.js` in Tampermonkey (open the file, or drag it into the Tampermonkey dashboard).
-
-For local development, `npm run serve` serves the build at http://127.0.0.1:8778/redgifsbooru.user.js. That is the script's update URL: bump `version` in `vite.config.ts` and rebuild, and Tampermonkey offers the update.
-
-Disable other RedGifs userscripts on `/booru` pages, or they may conflict with this one.
+Install `dist/redgifsbooru.user.js` in Tampermonkey.
 
 ## Search syntax
 

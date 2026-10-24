@@ -7,7 +7,9 @@
   "description": "An e621-style booru front end for RedGifs, as a userscript.",
   "scripts": {
     "build": "tsc --noEmit && vite build",
+    "build:local": "tsc --noEmit && vite build --mode dev",
     "watch": "vite build --watch",
+    "watch:local": "vite build --watch --mode dev",
     "serve": "node serve.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
