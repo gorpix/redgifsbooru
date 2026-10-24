@@ -16,6 +16,7 @@ export default defineConfig({
         version: '0.5.1',
         description: 'An e621-style booru for RedGifs at /booru/posts. The rest of RedGifs is left alone.',
         author: 'RedGIFsbooru',
+        license: 'GPL-3.0-or-later',
         match: ['https://www.redgifs.com/*', 'https://redgifs.com/*'],
         'run-at': 'document-start',
         grant: ['GM_xmlhttpRequest', 'GM_download'],
