@@ -2,6 +2,14 @@
 
 An e621-style booru front end for RedGifs, as a userscript. It replaces RedGifs' interface under `/booru` (for example https://www.redgifs.com/booru/posts) and leaves the rest of the site alone.
 
+## Changelog
+
+- **0.6.5**: Content filters: hide untagged posts, and posts without a gender tag (via tag implications).
+- **0.6.2**: RedGifs account: favourites (`fav:me`), follows, sets (collections), and a feed of followed creators.
+- **0.5.2**: One-click install and automatic updates from GitHub releases.
+- **0.5.1**: Post page display options (fit / fit width / fit height / original) in the sidebar.
+- **0.5.0**: Tag wiki, creator pages, pools, popular. Post page with player, categorized tags and related posts. Aliases, merges, blacklist.
+
 ## Features
 
 - Numbered pages of exact-tag search results.
@@ -10,7 +18,9 @@ An e621-style booru front end for RedGifs, as a userscript. It replaces RedGifs'
 - Post page with player, categorized tags, and related posts.
 - Tag wiki, creator pages, pools (RedGifs niches), and popular feeds.
 - Tag aliases and merges, both built in and user-defined.
-- Blacklist, with import from RedGIFS-X settings.
+- Blacklist, with import from RedGIFS-X settings or your RedGifs blocked tags.
+- Filters for untagged posts and posts without a gender tag.
+- RedGifs account (log in on RedGifs once): favourites, follows, sets, and a feed of followed creators. The login token is never stored.
 - Gentle on RedGifs' API: a request budget shared across tabs, and cached responses.
 
 ## Install
@@ -46,6 +56,7 @@ Install `dist/redgifsbooru.user.js` in Tampermonkey.
 | `order:latest`, `order:week`, `order:month` | Server-side order. `order:trending` is the default. |
 | `order:views`, `order:score`, `order:oldest` | Sort within the current page only. |
 | `type:image` | Images only. The default is videos (`type:video` or `type:gif`). |
+| `fav:me` | Only your favourites (requires a RedGifs login). |
 
 ## Development
 
