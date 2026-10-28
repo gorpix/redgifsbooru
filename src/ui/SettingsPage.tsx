@@ -13,6 +13,11 @@ import { getMergeText, setMergeText } from '../store/merges';
 import { detectRedgifsX, importRedgifsX, type ImportCounts } from '../store/importRedgifsX';
 import { getSettings, subscribeSettings, updateSettings } from '../store/settings';
 import { defaultStorage } from '../store/storage';
+import type { AuthManager } from '../api/auth';
+import type { RedgifsApi } from '../api/client';
+import { useAuthState } from './account';
+import { describeBlockedImport, importBlockedTags } from './accountHelpers';
+import { errorMessage } from './postsHelpers';
 import { formatCount } from './format';
 import { useSubscription } from './hooks';
 
@@ -45,7 +50,85 @@ function describeCounts(c: ImportCounts): string {
   return parts.join(', ');
 }
 
-export function SettingsPage({ tagCounts }: { tagCounts: TagCounts }) {
+/** Settings -> Account: login state, refresh, keep-alive and the blocked-tags import. Shows no token. */
+function AccountSection({ auth, api, onBlacklistChanged }: { auth: AuthManager; api: RedgifsApi; onBlacklistChanged: () => void }) {
+  const { state, username } = useAuthState();
+  const settingsVersion = useSubscription(subscribeSettings);
+  const settings = useMemo(() => getSettings(), [settingsVersion]);
+  const [busy, setBusy] = useState<'refresh' | 'import' | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const label = state === 'loggedIn' ? 'Logged in' : state === 'loggedOut' ? 'Logged out' : state === 'error' ? 'Login problem' : 'Checking…';
+
+  const refresh = async () => {
+    setBusy('refresh');
+    setMessage(null);
+    try {
+      const ok = await auth.refresh(true);
+      setMessage(ok ? 'Login refreshed.' : 'Could not refresh the login. Log in on RedGifs, then try again.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const importBlocked = async () => {
+    setBusy('import');
+    setMessage(null);
+    try {
+      const me = await api.account.me();
+      const result = importBlockedTags(getBlacklistText(), me.blockedTags);
+      if (result.added > 0) {
+        setBlacklistText(result.text);
+        onBlacklistChanged();
+      }
+      setMessage(describeBlockedImport(result.added, me.blockedTags.length));
+    } catch (error) {
+      setMessage(`Could not read your blocked tags: ${errorMessage(error)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section class="panel">
+      <h2>Account</h2>
+      <p>
+        Status: <b class={state === 'error' ? 'error' : undefined}>{label}</b>
+        {state === 'loggedIn' && username && <> as <b>{username}</b></>}
+      </p>
+      {state !== 'loggedIn' && (
+        <p class="muted">
+          Log in on <a href="https://www.redgifs.com/login" target="_blank" rel="noopener noreferrer">RedGifs</a> (opens a new tab);
+          this page notices when you come back. Favorites, follows and sets need it.
+        </p>
+      )}
+      <p>
+        <button type="button" disabled={busy !== null} onClick={() => { void refresh(); }}>
+          {busy === 'refresh' ? 'Refreshing…' : 'Refresh login now'}
+        </button>
+      </p>
+      <p>
+        <label>
+          <input
+            type="checkbox"
+            checked={settings.keepLoggedIn}
+            onChange={(event) => updateSettings({ keepLoggedIn: (event.currentTarget as HTMLInputElement).checked })}
+          />{' '}
+          Keep me logged in
+        </label>
+        <br />
+        <span class="muted">Renews the login in the background before it expires (about once an hour) while a booru tab is open.</span>
+      </p>
+      <p>
+        <button type="button" disabled={busy !== null || state !== 'loggedIn'} onClick={() => { void importBlocked(); }}>
+          {busy === 'import' ? 'Importing…' : 'Import RedGifs blocked tags into the blacklist'}
+        </button>
+      </p>
+      {message && <p class="rgb-notice" role="status">{message}</p>}
+    </section>
+  );
+}
+
+export function SettingsPage({ tagCounts, auth, api }: { tagCounts: TagCounts; auth: AuthManager; api: RedgifsApi }) {
   const version = useSubscription(subscribeSettings);
   const settings = useMemo(() => getSettings(), [version]);
 
@@ -194,6 +277,8 @@ export function SettingsPage({ tagCounts }: { tagCounts: TagCounts }) {
           ))}
         </details>
       </section>
+
+      <AccountSection auth={auth} api={api} onBlacklistChanged={() => setText(getBlacklistText())} />
 
       <section class="panel">
         <h2>Display</h2>

@@ -3,7 +3,7 @@ import type { Gif } from '../api/types';
 import { categoryOf, CATEGORY_LABEL, CATEGORY_ORDER, type Category } from '../search/categories';
 import type { MergeIndex } from '../search/merges';
 import { normalizeTag } from '../search/tags';
-import type { PostSrc } from '../router';
+import type { PostSrc, Route } from '../router';
 import { formatNicheName, tagToken } from './format';
 import { neighbours } from './postHelpers';
 import type { Source } from './postsHelpers';
@@ -364,17 +364,35 @@ export async function resolveNeighbour(
 
 /** The stream a post's `?src=` names, for the search pipeline (prev/next uses the grid's own filler). */
 export function sourceFromSrc(src: PostSrc): Source {
+  if (src === 'liked') return { kind: 'liked' };
+  if (src === 'following') return { kind: 'following' };
   if (src.startsWith('user:')) return { kind: 'user', name: src.slice(5) };
   if (src.startsWith('niche:')) return { kind: 'niche', id: src.slice(6) };
+  if (src.startsWith('set:')) return { kind: 'set', id: src.slice(4) };
   return { kind: 'search' };
 }
 
-/** The prev/next bar's label for the stream: 'Search', the creator's name, or 'Pool: <name>'. */
+/** The prev/next bar's label for the stream: 'Search', the creator's name, 'Pool: <name>', 'Favorites' or 'Set'. */
 export function streamLabel(src: PostSrc): string {
   const source = sourceFromSrc(src);
   switch (source.kind) {
     case 'user': return source.name;
     case 'niche': return `Pool: ${formatNicheName(source.id)}`;
+    case 'liked': return 'Favorites';
+    case 'following': return 'Feed';
+    case 'set': return 'Set';
     case 'search': return 'Search';
+  }
+}
+
+/** The grid page a post was opened from, as a route (for the prev/next bar's middle link). */
+export function gridRouteFor(source: Source, q: string, page: number): Route {
+  switch (source.kind) {
+    case 'user': return { name: 'user', user: source.name, tags: q, page };
+    case 'niche': return { name: 'pool', id: source.id, tags: q, page };
+    case 'liked': return { name: 'favorites', tags: q, page };
+    case 'following': return { name: 'feed', tags: q, page };
+    case 'set': return { name: 'set', id: source.id, tags: q, page };
+    case 'search': return { name: 'posts', tags: q, page };
   }
 }

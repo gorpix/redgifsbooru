@@ -89,3 +89,52 @@ describe('phase 4 redgifsUrlFor', () => {
     expect(redgifsUrlFor({ name: 'wikiIndex', q: '' })).toBe('/');
   });
 });
+
+describe('phase 5 account routes', () => {
+  it('parses favorites, following, sets and set', () => {
+    expect(parseRoute('/booru/favorites')).toEqual({ name: 'favorites', tags: '', page: 1 });
+    expect(parseRoute('/booru/favorites/', '?tags=red_hair&page=3')).toEqual({ name: 'favorites', tags: 'red_hair', page: 3 });
+    expect(parseRoute('/booru/following')).toEqual({ name: 'following', page: 1 });
+    expect(parseRoute('/booru/following', '?page=2')).toEqual({ name: 'following', page: 2 });
+    expect(parseRoute('/booru/sets')).toEqual({ name: 'sets' });
+    expect(parseRoute('/booru/sets/abc123')).toEqual({ name: 'set', id: 'abc123', tags: '', page: 1 });
+    expect(parseRoute('/booru/sets/abc123', '?tags=x&page=2')).toEqual({ name: 'set', id: 'abc123', tags: 'x', page: 2 });
+    expect(parseRoute('/booru/sets/a/b')).toMatchObject({ name: 'notFound' });
+  });
+
+  it('builds URLs and round-trips', () => {
+    expect(hrefFor({ name: 'favorites', tags: '', page: 1 })).toBe('/booru/favorites');
+    expect(hrefFor({ name: 'favorites', tags: 'a b', page: 2 })).toBe('/booru/favorites?tags=a+b&page=2');
+    expect(hrefFor({ name: 'following', page: 1 })).toBe('/booru/following');
+    expect(hrefFor({ name: 'following', page: 4 })).toBe('/booru/following?page=4');
+    expect(hrefFor({ name: 'sets' })).toBe('/booru/sets');
+    expect(hrefFor({ name: 'set', id: 'a b', tags: '', page: 1 })).toBe('/booru/sets/a%20b');
+    const routes: Route[] = [
+      { name: 'favorites', tags: 'a b', page: 2 },
+      { name: 'favorites', tags: '', page: 1 },
+      { name: 'following', page: 3 },
+      { name: 'sets' },
+      { name: 'set', id: 'x y', tags: 'q', page: 5 },
+    ];
+    for (const route of routes) {
+      const url = new URL(hrefFor(route), 'https://www.redgifs.com');
+      expect(parseRoute(url.pathname, url.search)).toEqual(route);
+    }
+  });
+
+  it('redgifsUrlFor falls back to the home page', () => {
+    expect(redgifsUrlFor({ name: 'favorites', tags: '', page: 1 })).toBe('/');
+    expect(redgifsUrlFor({ name: 'following', page: 1 })).toBe('/');
+    expect(redgifsUrlFor({ name: 'sets' })).toBe('/');
+    expect(redgifsUrlFor({ name: 'set', id: 'a', tags: '', page: 1 })).toBe('/');
+  });
+
+  it('post src accepts liked and set:<id>', () => {
+    expect(parseRoute('/booru/posts/abc', '?src=liked')).toMatchObject({ src: 'liked' });
+    expect(parseRoute('/booru/posts/abc', '?src=set%3Af1')).toMatchObject({ src: 'set:f1' });
+    expect(parseRoute('/booru/posts/abc', '?src=set%3A')).toMatchObject({ src: '' });
+    expect(parseRoute('/booru/posts/abc', '?src=liked%3Ax')).toMatchObject({ src: '' });
+    expect(hrefFor({ name: 'post', id: 'abc', q: '', page: 1, src: 'liked' })).toBe('/booru/posts/abc?src=liked');
+    expect(hrefFor({ name: 'post', id: 'abc', q: 'x', page: 2, src: 'set:f1' })).toBe('/booru/posts/abc?q=x&page=2&src=set%3Af1');
+  });
+});

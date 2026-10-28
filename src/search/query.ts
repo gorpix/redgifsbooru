@@ -34,6 +34,8 @@ export interface Query {
   serverOrder: ServerOrder;
   pageSort: PageSort | null;
   type: MediaType;
+  /** `fav:me`: search my RedGifs favorites instead of all posts. */
+  fav: boolean;
 }
 
 const TOKEN_RE = /(--|-|~)?(?:"([^"]+)"|([^\s"]+))/g;
@@ -196,6 +198,7 @@ export function parseQuery(text: string): Query {
     serverOrder: 'trending',
     pageSort: null,
     type: 'g',
+    fav: false,
   };
   const exclusionKeys = new Set<string>();
   const metaLabels = new Set<string>();
@@ -222,6 +225,11 @@ export function parseQuery(text: string): Query {
       const type = /^type:(.+)$/i.exec(raw);
       if (type && TYPES[type[1].toLowerCase()]) {
         query.type = TYPES[type[1].toLowerCase()];
+        continue;
+      }
+      // `fav:me` only; any other `fav:` value stays an ordinary tag.
+      if (/^fav:me$/i.test(raw)) {
+        query.fav = true;
         continue;
       }
       const meta = parseMetaFilter(raw);
@@ -254,6 +262,7 @@ export function parseQuery(text: string): Query {
 function format(query: Query, sorted: boolean): string {
   const arrange = (list: string[]) => (sorted ? [...list].sort() : list);
   const parts: string[] = [];
+  if (query.fav) parts.push('fav:me');
   parts.push(...arrange(query.required.map(toTagTerm)));
   parts.push(
     ...arrange(query.exclusions.map((e) => `${e.mode === 'partial' ? '--' : '-'}${toTagTerm(e.value)}`)),

@@ -5,6 +5,7 @@ import type { UserProfile } from '../api/types';
 import { hrefFor, type Route, type Router } from '../router';
 import { safeLink } from './browseHelpers';
 import { Columns } from './Columns';
+import { FollowButton } from './FollowButton';
 import { formatCount } from './format';
 import { PostGrid, usePostGrid } from './PostGrid';
 import { errorMessage } from './postsHelpers';
@@ -32,6 +33,8 @@ function ProfileBox({ profile, fallbackName }: { profile: UserProfile | null; fa
         <p class="rgb-profile-name">
           {profile.username}
           {profile.verified && <span class="rgb-verified" title="Verified creator"> ✓</span>}
+          {' '}
+          <FollowButton name={profile.username} />
         </p>
         {profile.description && <p class="rgb-profile-bio">{profile.description}</p>}
         <p class="muted rgb-profile-stats">

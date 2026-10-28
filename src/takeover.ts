@@ -24,12 +24,14 @@ export const OWNED_ATTR = 'data-rgb';
 
 /**
  * Applied to the page's own code only; the booru's images come from <img>.
+ * connect-src allows only RedGifs' login host (auth2.redgifs.com): the booru's own
+ * page-world token refresh (src/api/pageRunner.ts) needs it; RedGifs' app stays blocked.
  * Inline/eval scripts stay allowed so other extensions and dev tools that
  * inject code still work; RedGifs' app is all external chunks, which are
  * blocked, and its inline scripts are left in the detached old document.
  */
 export const PAGE_CSP =
-  "script-src 'unsafe-inline' 'unsafe-eval' moz-extension:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; manifest-src 'none'";
+  "script-src 'unsafe-inline' 'unsafe-eval' moz-extension:; connect-src https://auth2.redgifs.com; frame-src 'none'; worker-src 'none'; object-src 'none'; manifest-src 'none'";
 
 function cspMeta(): HTMLMetaElement {
   const meta = document.createElement('meta');

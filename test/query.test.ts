@@ -14,7 +14,23 @@ describe('parseQuery tokens', () => {
       serverOrder: 'trending',
       pageSort: null,
       type: 'g',
+      fav: false,
     });
+  });
+
+  it('parses the fav:me flag and keeps other fav: values as tags', () => {
+    expect(parseQuery('fav:me').fav).toBe(true);
+    expect(parseQuery('FAV:ME blonde').required).toEqual(['blonde']);
+    expect(parseQuery('blonde fav:me').fav).toBe(true);
+    const other = parseQuery('fav:you');
+    expect(other.fav).toBe(false);
+    expect(other.required).toEqual(['fav:you']);
+    // quoted or prefixed tokens are tags, not the flag
+    expect(parseQuery('"fav:me"').fav).toBe(false);
+    expect(parseQuery('-fav:me').fav).toBe(false);
+    expect(formatQuery(parseQuery('blonde Fav:Me -anal'))).toBe('fav:me blonde -anal');
+    expect(queryKey(parseQuery('fav:me a'))).not.toBe(queryKey(parseQuery('a')));
+    expect(formatQuery(parseQuery(formatQuery(parseQuery('fav:me a'))))).toBe('fav:me a');
   });
 
   it('parses required, excludes, partial excludes and any-group', () => {

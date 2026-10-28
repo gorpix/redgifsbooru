@@ -15,6 +15,7 @@
 // free when arriving from the grid.
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { RedgifsApi, TagSuggestion } from '../api/client';
+import { createMergedFeed } from '../search/mergedFeed';
 import { fetchNichePage } from '../api/nicheOrder';
 import type { SearchOrder, SearchPage } from '../api/types';
 import { aliasBlacklist, applyAliases, buildAliasMap } from '../search/aliases';
@@ -32,8 +33,9 @@ import { getMergeText, subscribeMerges } from '../store/merges';
 import { defaultStorage } from '../store/storage';
 import { getSettings, subscribeSettings, type Settings } from '../store/settings';
 import { getFiller, type FillerEntry } from './fillers';
+import { useFollowedNames } from './account';
 import { useSubscription } from './hooks';
-import { djb2Hex, fillerId, mergeSignature, SEARCH_SOURCE, sourceKey, type Source } from './postsHelpers';
+import { djb2Hex, effectiveSource, fillerId, mergeSignature, SEARCH_SOURCE, sourceKey, type Source } from './postsHelpers';
 
 export type { Source } from './postsHelpers';
 
@@ -71,11 +73,20 @@ export interface DerivedQuery {
   queryText: string;
 }
 
-/** parse -> aliases -> merges. */
-export function deriveQuery(tagsText: string, aliasMap: AliasMap, mergeIndex: MergeIndex): DerivedQuery {
+/** parse -> aliases -> merges. `forceFav` (a favorites grid) makes it a `fav:me` query whatever the text says. */
+export function deriveQuery(tagsText: string, aliasMap: AliasMap, mergeIndex: MergeIndex, forceFav = false): DerivedQuery {
   const aliased = applyAliases(parseQuery(tagsText), aliasMap);
   const merged = applyMerges(aliased.query, mergeIndex);
-  return { aliased, merged, query: merged.query, queryText: formatQuery(merged.query) };
+  const query = forceFav && !merged.query.fav ? { ...merged.query, fav: true } : merged.query;
+  return { aliased, merged, query, queryText: formatQuery(query) };
+}
+
+/**
+ * RedGifs' page count as the filler wants it: a feed that does not say (0) is read until it
+ * returns an empty page (Infinity is "not a finite number", which the filler ignores).
+ */
+export function streamPages(pages: number, gifCount: number): number {
+  return pages > 0 || gifCount === 0 ? pages : Infinity;
 }
 
 /** The user's blacklist with aliases and merges applied (all rules, paused or not). */
@@ -125,8 +136,11 @@ export interface EntryInput {
 export function buildFillerEntry({ api, id, query, rules, mergeIndex, pageSize, canonical, source = SEARCH_SOURCE }: EntryInput): FillerEntry {
   const spelled = (key: string) => canonical?.get(key) ?? key;
   const { serverOrder: order, type } = query;
-  // A niche cannot be filtered by tag on the server: one stream, every filter applies client-side.
-  const streamTags = source.kind === 'niche' ? [undefined] : serverStreams(query, mergeIndex, spelled);
+  // A niche, my favorites and a set cannot be filtered by tag on the server: one stream, every
+  // filter applies client-side.
+  const streamTags = source.kind === 'niche' || source.kind === 'liked' || source.kind === 'set'
+    ? [undefined]
+    : serverStreams(query, mergeIndex, spelled);
   const load = (tags: string[] | undefined, serverPage: number, signal: AbortSignal): Promise<SearchPage> => {
     switch (source.kind) {
       case 'user':
@@ -134,11 +148,23 @@ export function buildFillerEntry({ api, id, query, rules, mergeIndex, pageSize, 
       case 'niche':
         // 'trending' (the default) is probed once and remembered; see fetchNichePage.
         return fetchNichePage(api, source.id, { order, count: 100, page: serverPage }, { signal }, defaultStorage());
+      case 'liked':
+        return api.account.likedFeed({ page: serverPage, count: 30, type }, { signal });
+      case 'set':
+        // A set holds videos and images alike, so the type: filter does not apply.
+        return api.account.collectionGifs(source.id, { page: serverPage, count: 100 }, { signal });
+      case 'following':
+        throw new Error('the feed reads creators through its merged streams');
       case 'search':
         return api.searchGifs({ order, type, tags, count: 100, page: serverPage }, { signal });
     }
   };
-  const fetchers: FetchStreamPage[] = streamTags.map((tags, streamIndex) => (serverPage, signal) =>
+  // The feed: per tag stream, a merge of every followed creator's newest-first posts (30 per request).
+  const feeds: FetchStreamPage[] | null = source.kind === 'following'
+    ? streamTags.map((tags) => createMergedFeed((source.names ?? []).map((name) => (page, signal) =>
+      api.userGifs(name, { order: 'latest', type, tags, count: 30, page }, { signal }))))
+    : null;
+  const fetchers: FetchStreamPage[] = feeds ?? streamTags.map((tags, streamIndex) => (serverPage, signal) =>
     load(tags, serverPage, signal)
       .then((r) => {
         if (serverPage === 1) {
@@ -146,7 +172,7 @@ export function buildFillerEntry({ api, id, query, rules, mergeIndex, pageSize, 
           totals[streamIndex] = r.total;
           searchTotals.set(id, totals);
         }
-        return { gifs: r.gifs, pages: r.pages };
+        return { gifs: r.gifs, pages: source.kind === 'liked' || source.kind === 'set' ? streamPages(r.pages, r.gifs.length) : r.pages };
       }));
   const now = () => Date.now() / 1000;
   return getFiller(id, () => new PageFiller({
@@ -154,7 +180,7 @@ export function buildFillerEntry({ api, id, query, rules, mergeIndex, pageSize, 
     pageSize,
     maxServerPagesPerRun: MAX_SERVER_PAGES_PER_RUN,
     storage: session(),
-    fetchPage: combineStreams(fetchers, order),
+    fetchPage: combineStreams(fetchers, source.kind === 'following' ? 'latest' : order),
     check: (gif) => checkGif(gif, query, rules, now(), mergeIndex),
   }));
 }
@@ -179,6 +205,8 @@ export interface SearchPipeline extends DerivedQuery {
   allRules: BlacklistRule[];
   /** The rules in effect for the search. */
   rules: BlacklistRule[];
+  /** The source the grid really reads (a `fav:me` search reads my favorites). */
+  source: Source;
   /** Filler id: identifies the shared PageFiller. */
   id: string;
   /** null while tags are being checked; 'ok' once every required / ~any tag exists on RedGifs. */
@@ -198,7 +226,10 @@ export interface SearchPipeline extends DerivedQuery {
  * Derives the whole search pipeline for a tags string (see the file header). Behaviour is exactly
  * what PostsIndex did inline: it re-derives when aliases / merges / blacklist / settings change.
  */
-export function useSearchPipeline(tagsText: string, { api, source = SEARCH_SOURCE }: { api: RedgifsApi; source?: Source }): SearchPipeline {
+export function useSearchPipeline(
+  tagsText: string,
+  { api, source: given = SEARCH_SOURCE, enabled = true }: { api: RedgifsApi; source?: Source; /** false = build no filler (e.g. a favorites grid while logged out). */ enabled?: boolean },
+): SearchPipeline {
   const aliasVersion = useSubscription(subscribeAliases);
   const aliasMap = useMemo(
     () => buildAliasMap(BUILTIN_ALIASES, parseAliasText(getAliasText())),
@@ -209,8 +240,13 @@ export function useSearchPipeline(tagsText: string, { api, source = SEARCH_SOURC
     () => buildMergeIndex(BUILTIN_MERGES, parseMergeText(getMergeText())),
     [mergeVersion],
   );
-  const derived = useMemo(() => deriveQuery(tagsText, aliasMap, mergeIndex), [tagsText, aliasMap, mergeIndex]);
+  const derived = useMemo(() => deriveQuery(tagsText, aliasMap, mergeIndex, given.kind === 'liked'), [tagsText, aliasMap, mergeIndex, given.kind]);
   const { query } = derived;
+  // The feed needs the followed names (they are part of the filler id, so following / unfollowing rebuilds it).
+  const followed = useFollowedNames(given.kind === 'following');
+  const effective = effectiveSource(query, given);
+  const source: Source = effective.kind === 'following' ? { kind: 'following', names: followed.names } : effective;
+  const followedReady = effective.kind !== 'following' || (followed.state === 'ready' && followed.names.length > 0);
 
   const settingsVersion = useSubscription(subscribeSettings);
   const blacklistVersion = useSubscription(subscribeBlacklist);
@@ -259,7 +295,7 @@ export function useSearchPipeline(tagsText: string, { api, source = SEARCH_SOURC
   const validation: Validation | null = keys.length === 0
     ? { id: '', kind: 'ok', canonical: new Map() }
     : validated && validated.id === keysId ? validated : null;
-  const ready = validation?.kind === 'ok';
+  const ready = validation?.kind === 'ok' && enabled && followedReady;
 
   const id = pipelineFillerId(query, pageSize, rules, mergeIndex, source);
   const entry = useMemo(() => {
@@ -276,6 +312,7 @@ export function useSearchPipeline(tagsText: string, { api, source = SEARCH_SOURC
     pageSize,
     allRules,
     rules,
+    source,
     id,
     validation,
     ready,

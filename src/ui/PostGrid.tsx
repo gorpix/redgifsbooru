@@ -3,6 +3,7 @@
 // the thumbnails and the paginator. `usePostGrid` is the logic, `PostGrid` the markup, so a page can
 // build its sidebar from the same posts and fill state.
 import { useEffect, useMemo, useState } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
 import { hrefFor, type PostSrc } from '../router';
 import { replaceTagInQuery } from '../search/edit';
 import type { FillState } from '../search/filler';
@@ -65,11 +66,13 @@ interface Props {
   linkTo?: (tags: string, page: number) => string;
   /** Stream of the grid (creator / pool), carried in the post links so prev/next stays in it. */
   src?: PostSrc;
+  /** Extra control under each thumbnail. */
+  thumbAction?: (gif: Gif) => ComponentChildren;
 }
 
 const postsLink = (tags: string, page: number) => hrefFor({ name: 'posts', tags, page });
 
-export function PostGrid({ grid, tags, linkTo = postsLink, src = '' }: Props) {
+export function PostGrid({ grid, tags, linkTo = postsLink, src = '', thumbAction }: Props) {
   const { pipeline, page, state, posts } = grid;
   const { aliased, merged, query, mergeIndex, validation } = pipeline;
 
@@ -159,7 +162,7 @@ export function PostGrid({ grid, tags, linkTo = postsLink, src = '' }: Props) {
         </p>
       )}
       <div class="thumb-grid">
-        {posts.map((gif) => <Thumb key={gif.id} gif={gif} q={tags} page={page} src={src} />)}
+        {posts.map((gif) => <Thumb key={gif.id} gif={gif} q={tags} page={page} src={src} action={thumbAction?.(gif)} />)}
       </div>
       {showPaginator && state && (
         <Paginator href={(p) => linkTo(tags, p)} current={page} knownPages={state.knownPages} lastPage={state.lastPage} />

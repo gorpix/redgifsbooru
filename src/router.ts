@@ -6,12 +6,16 @@ import { normalizeTag, toTagTerm } from './search/tags';
 
 export const BASE = '/booru';
 
-/** Where a post was opened from: '' = the global search, otherwise a creator or a pool (niche). */
-export type PostSrc = '' | `user:${string}` | `niche:${string}`;
+/**
+ * Where a post was opened from: '' = the global search, otherwise a creator, a pool (niche),
+ * my favorites ('liked') or one of my sets ('set:<id>').
+ */
+export type PostSrc = '' | 'liked' | 'following' | `user:${string}` | `niche:${string}` | `set:${string}`;
 
 export function parsePostSrc(value: string | null): PostSrc {
   const text = (value ?? '').trim();
-  return /^(user|niche):\S/.test(text) ? (text as PostSrc) : '';
+  if (text === 'liked' || text === 'following') return text;
+  return /^(user|niche|set):\S/.test(text) ? (text as PostSrc) : '';
 }
 
 export type PopularScale = 'day' | 'week' | 'month';
@@ -35,6 +39,16 @@ export type Route =
   /** A RedGifs niche shown as an e621 pool. */
   | { name: 'pool'; id: string; tags: string; page: number }
   | { name: 'popular'; scale: PopularScale }
+  /** My RedGifs favorites (`fav:me` plus `tags`). */
+  | { name: 'favorites'; tags: string; page: number }
+  /** Merged newest posts of the creators I follow (`tags` scopes the search). */
+  | { name: 'feed'; tags: string; page: number }
+  /** Creators I follow. */
+  | { name: 'following'; page: number }
+  /** My RedGifs collections. */
+  | { name: 'sets' }
+  /** One of my collections as a grid. */
+  | { name: 'set'; id: string; tags: string; page: number }
   | { name: 'notFound'; path: string };
 
 /** True for paths this script takes over; everything else stays RedGifs'. */
@@ -97,6 +111,15 @@ export function parseRoute(pathname: string, search = ''): Route {
     const id = decode(pool[1]).trim();
     if (id) return { name: 'pool', id, tags: (params.get('tags') ?? '').trim(), page: parsePage(params.get('page')) };
   }
+  if (rest === '/favorites') return { name: 'favorites', tags: (params.get('tags') ?? '').trim(), page: parsePage(params.get('page')) };
+  if (rest === '/feed') return { name: 'feed', tags: (params.get('tags') ?? '').trim(), page: parsePage(params.get('page')) };
+  if (rest === '/following') return { name: 'following', page: parsePage(params.get('page')) };
+  if (rest === '/sets') return { name: 'sets' };
+  const set = /^\/sets\/([^/]+)$/.exec(rest);
+  if (set) {
+    const id = decode(set[1]).trim();
+    if (id) return { name: 'set', id, tags: (params.get('tags') ?? '').trim(), page: parsePage(params.get('page')) };
+  }
   if (rest === '/popular') return { name: 'popular', scale: parseScale(params.get('scale')) };
   return { name: 'notFound', path: pathname };
 }
@@ -132,6 +155,16 @@ export function hrefFor(route: Route): string {
       return `${BASE}/pools/${encodeURIComponent(route.id)}${gridQuery(route.tags, route.page)}`;
     case 'popular':
       return `${BASE}/popular${route.scale !== 'day' ? `?scale=${route.scale}` : ''}`;
+    case 'favorites':
+      return `${BASE}/favorites${gridQuery(route.tags, route.page)}`;
+    case 'feed':
+      return `${BASE}/feed${gridQuery(route.tags, route.page)}`;
+    case 'following':
+      return `${BASE}/following${route.page > 1 ? `?page=${route.page}` : ''}`;
+    case 'sets':
+      return `${BASE}/sets`;
+    case 'set':
+      return `${BASE}/sets/${encodeURIComponent(route.id)}${gridQuery(route.tags, route.page)}`;
     case 'notFound':
       return route.path;
   }
@@ -144,6 +177,13 @@ export function redgifsUrlFor(route: Route): string {
     case 'user': return `/users/${encodeURIComponent(route.user)}`;
     case 'pool': return `/niches/${encodeURIComponent(route.id)}`;
     case 'pools': return '/niches';
+    // Account pages have no stable RedGifs counterpart that we know of: the home page.
+    case 'favorites':
+    case 'feed':
+    case 'following':
+    case 'sets':
+    case 'set':
+      return '/';
     default: return '/';
   }
 }

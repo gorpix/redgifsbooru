@@ -2,12 +2,16 @@ import { GM_download, GM_xmlhttpRequest } from '$';
 import { render } from 'preact';
 import { RequestBudget } from './api/budget';
 import { createCache } from './api/cache';
+import { AuthManager, type AuthDebugEvent } from './api/auth';
+import { pageRunner } from './api/pageRunner';
 import { RedgifsApi, type ApiOptions, type RequestEvent } from './api/client';
 import { gmTransport, type GmRequest } from './api/http';
 import { RequestQueue } from './api/queue';
 import { TagCounts } from './api/tagCounts';
 import { TokenManager } from './api/token';
 import { Router, isBooruPath } from './router';
+import { createFollowsStore, createLikesStore } from './store/account';
+import { getSettings, subscribeSettings } from './store/settings';
 import { takeOver } from './takeover';
 import css from './theme.css?inline';
 import browseCss from './theme-browse.css?inline';
@@ -42,7 +46,21 @@ async function main(): Promise<void> {
   const cache = await createCache();
   // One request budget and rate-limit pause shared by every booru tab, through localStorage.
   const queue = new RequestQueue({ budget: new RequestBudget(localStorage), storage: localStorage });
-  const apiOptions: ApiOptions = { transport, cache, tokens: new TokenManager(transport, localStorage), queue, storage: localStorage };
+  // The login: the page-world runner asks RedGifs for an id_token with the user's own session.
+  const authEvents: AuthDebugEvent[] = [];
+  const auth = new AuthManager({
+    runner: pageRunner(),
+    storage: localStorage,
+    keepLoggedIn: getSettings().keepLoggedIn,
+    // Debug events carry lengths and flags only, never a token.
+    onDebug: debug ? (event) => {
+      authEvents.push(event);
+      if (authEvents.length > REQUEST_LOG_MAX) authEvents.shift();
+      document.documentElement.dataset.rgbAuth = JSON.stringify(authEvents);
+    } : undefined,
+  });
+  subscribeSettings(() => auth.setKeepLoggedIn(getSettings().keepLoggedIn));
+  const apiOptions: ApiOptions = { transport, cache, tokens: new TokenManager(transport, localStorage), auth, queue, storage: localStorage };
   if (debug) {
     // Keep the last REQUEST_LOG_MAX request events on the page for tools to read.
     const requestLog: RequestEvent[] = [];
@@ -54,10 +72,16 @@ async function main(): Promise<void> {
     };
   }
   const api = new RedgifsApi(apiOptions);
+  // Pick up a login made in another tab when this one comes back into view.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) void auth.checkNow(); });
+  window.addEventListener('focus', () => { void auth.checkNow(); });
+  void auth.start();
+  const likes = createLikesStore(api.account, auth);
+  const follows = createFollowsStore(api.account, auth);
   const router = new Router();
   router.interceptLinks();
   const tagCounts = new TagCounts(api, localStorage);
-  render(<App api={api} router={router} tagCounts={tagCounts} />, mount);
+  render(<App api={api} router={router} tagCounts={tagCounts} auth={auth} likes={likes} follows={follows} />, mount);
 }
 
 void main();

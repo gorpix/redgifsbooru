@@ -109,3 +109,41 @@ export interface Niche extends NicheSummary {
   /** One text per rule. */
   rules: string[];
 }
+
+/** `/v1/me`, read defensively. */
+export interface Me {
+  username: string | null;
+  name: string | null;
+  description: string | null;
+  profileUrl: string | null;
+  profileImageUrl: string | null;
+  /** RedGifs' own blocked tags (read only here). */
+  blockedTags: string[];
+}
+
+/** One of my collections (the booru's "sets"), read defensively. */
+export interface Collection {
+  id: string;
+  name: string;
+  description: string | null;
+  published: boolean;
+  /** Preview image URLs, when RedGifs sends any. */
+  thumbs: string[];
+  /** Number of posts when RedGifs says; null otherwise. */
+  count: number | null;
+}
+
+export interface CollectionsPage {
+  collections: Collection[];
+  page: number;
+  pages: number;
+  total: number;
+}
+
+/** `/v2/me/following`: creators I follow. */
+export interface FollowingPage {
+  items: UserProfile[];
+  page: number;
+  pages: number;
+  total: number;
+}

@@ -2,7 +2,7 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { RedgifsApi } from '../api/client';
 import type { TagCounts } from '../api/tagCounts';
-import type { Gif } from '../api/types';
+import type { Collection, Gif } from '../api/types';
 import { hrefFor, type Route, type Router } from '../router';
 import { BUILTIN_CATEGORIES } from '../search/builtinCategories';
 import { CATEGORY_COLOR, parseCategoryText } from '../search/categories';
@@ -37,12 +37,19 @@ import {
   type ScaleMode,
   redgifsWatchUrl,
   resolveNeighbour,
+  gridRouteFor,
   sourceFromSrc,
   spellingFor,
   streamLabel,
   visibleThumbCount,
   withoutPost,
 } from './postPageHelpers';
+import { parseQuery } from '../search/query';
+import { useAccount, useAccountToggle, useAuthState, useEnsureLoaded } from './account';
+import { LOGIN_URL, setMembership, setNameProblem } from './accountHelpers';
+import { FollowButton } from './FollowButton';
+import { bumpSetRevision, effectiveSource, errorMessage, sourceNeedsLogin } from './postsHelpers';
+import { loadAllSets } from './setsData';
 import { useSearchPipeline, type SearchPipeline } from './searchPipeline';
 import { scoreColor, Thumb } from './Thumb';
 
@@ -65,7 +72,11 @@ type Loaded =
   | { id: string; kind: 'error'; error: unknown };
 
 export function PostPage({ api, router, tagCounts, route }: Props) {
-  const pipeline = useSearchPipeline(route.q, { api, source: useMemo(() => sourceFromSrc(route.src), [route.src]) });
+  // A post opened from my favorites or a set (or a `fav:me` search) needs the login to read its stream.
+  const { gate } = useAuthState();
+  const given = useMemo(() => sourceFromSrc(route.src), [route.src]);
+  const needsLogin = useMemo(() => sourceNeedsLogin(effectiveSource(parseQuery(route.q), given)), [route.q, given]);
+  const pipeline = useSearchPipeline(route.q, { api, source: given, enabled: !needsLogin || gate === 'ok' });
   const { mergeIndex } = pipeline;
 
   // The post: a remembered grid page first (no request), else one getGif.
@@ -137,7 +148,7 @@ export function PostPage({ api, router, tagCounts, route }: Props) {
     };
   }, [showRelatedBelow, gif?.id]);
 
-  const sidebar = gif ? <PostSidebar gif={gif} route={route} tagCounts={tagCounts} pipeline={pipeline} lookupKeys={lookupKeys} scale={scale} onScale={chooseScale} showRelatedBelow={showRelatedBelow} /> : null;
+  const sidebar = gif ? <PostSidebar api={api} gif={gif} route={route} tagCounts={tagCounts} pipeline={pipeline} lookupKeys={lookupKeys} scale={scale} onScale={chooseScale} showRelatedBelow={showRelatedBelow} /> : null;
 
   return (
     <Columns api={api} router={router} tagCounts={tagCounts} route={route} sidebar={sidebar}>
@@ -234,12 +245,7 @@ function NavBar({ route, router, pipeline }: { route: PostRoute; router: Router;
   if (!hasQuery) return null;
 
   /** The grid page the post came from. */
-  const source = sourceFromSrc(route.src);
-  const gridHref = source.kind === 'user'
-    ? hrefFor({ name: 'user', user: source.name, tags: route.q, page: route.page })
-    : source.kind === 'niche'
-      ? hrefFor({ name: 'pool', id: source.id, tags: route.q, page: route.page })
-      : hrefFor({ name: 'posts', tags: route.q, page: route.page });
+  const gridHref = hrefFor(gridRouteFor(sourceFromSrc(route.src), route.q, route.page));
 
   // Synchronous answers from remembered pages give real links (open in new tab etc.).
   const side = (dir: Dir, label: string) => {
@@ -379,7 +385,8 @@ function Row({ title, state, route }: { title: ComponentChildren; state: RowStat
 
 // ---------------------------------------------------------------- sidebar
 
-function PostSidebar({ gif, route, tagCounts, pipeline, lookupKeys, scale, onScale, showRelatedBelow }: {
+function PostSidebar({ api, gif, route, tagCounts, pipeline, lookupKeys, scale, onScale, showRelatedBelow }: {
+  api: RedgifsApi;
   gif: Gif;
   route: PostRoute;
   tagCounts: TagCounts;
@@ -415,6 +422,7 @@ function PostSidebar({ gif, route, tagCounts, pipeline, lookupKeys, scale, onSca
               {gif.userName}
             </a>
           </li>
+          <li class="rgb-follow-row"><FollowButton name={gif.userName} link /></li>
         </ul>
         {groups.map((group) => (
           <div key={group.category}>
@@ -440,7 +448,7 @@ function PostSidebar({ gif, route, tagCounts, pipeline, lookupKeys, scale, onSca
       </section>
       <InfoSection gif={gif} />
       <DisplaySection scale={scale} onScale={onScale} showRelatedBelow={showRelatedBelow} />
-      <OptionsSection gif={gif} />
+      <OptionsSection api={api} gif={gif} />
       {gif.niches?.length > 0 && (
         <section>
           <h2>Niches</h2>
@@ -529,7 +537,129 @@ function DisplaySection({ scale, onScale, showRelatedBelow }: {
   );
 }
 
-function OptionsSection({ gif }: { gif: Gif }) {
+/** "Favorite" / "Unfavorite" in the Options list. */
+function FavoriteOption({ id }: { id: string }) {
+  const account = useAccount();
+  useEnsureLoaded(account?.likes ?? null);
+  const fav = useAccountToggle(account?.likes ?? null, id, 'favorite');
+  if (!account) return null;
+  return (
+    <li>
+      <button type="button" class="link-btn" onClick={() => { void fav.toggle(); }}>{fav.on ? 'Unfavorite' : 'Favorite'}</button>
+      {fav.note && (
+        <span class={`rgb-inline-note ${fav.note.kind}`} role="status">
+          {' '}
+          {fav.note.kind === 'login'
+            ? <a href={LOGIN_URL} target="_blank" rel="noopener noreferrer">{fav.note.text}</a>
+            : fav.note.text}
+        </span>
+      )}
+    </li>
+  );
+}
+
+/** "Add to set…": lists my sets (loaded when first opened) with an "add" link each, and "New set…". */
+function AddToSet({ api, gifId }: { api: RedgifsApi; gifId: string }) {
+  const { gate } = useAuthState();
+  const [open, setOpen] = useState(false);
+  const [sets, setSets] = useState<{ status: 'loading' } | { status: 'ok'; list: Collection[] } | { status: 'error'; message: string }>({ status: 'loading' });
+  const [version, setVersion] = useState(0);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [naming, setNaming] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || gate !== 'ok') return;
+    const controller = new AbortController();
+    setSets({ status: 'loading' });
+    loadAllSets(api, controller.signal).then(
+      (list) => { if (!controller.signal.aborted) setSets({ status: 'ok', list }); },
+      (error) => { if (!controller.signal.aborted) setSets({ status: 'error', message: errorMessage(error) }); },
+    );
+    return () => controller.abort();
+  }, [open, gate, api]);
+
+  const add = async (set: Collection) => {
+    setBusy(set.id);
+    setNote(null);
+    try {
+      await api.account.addToCollection(set.id, gifId);
+      setMembership.add(gifId, set.id);
+      bumpSetRevision(set.id);
+      setVersion((n) => n + 1);
+    } catch (error) {
+      setNote(errorMessage(error));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const createAndAdd = async () => {
+    const name = (naming ?? '').trim();
+    const problem = setNameProblem(name);
+    if (problem) { setNote(problem); return; }
+    setBusy('new');
+    setNote(null);
+    try {
+      const created = await api.account.createCollection({ folderName: name, description: null, published: false });
+      if (created.id) {
+        await api.account.addToCollection(created.id, gifId);
+        setMembership.add(gifId, created.id);
+        bumpSetRevision(created.id);
+        setSets((current) => (current.status === 'ok' ? { status: 'ok', list: [...current.list, created] } : current));
+      }
+      setNaming(null);
+      setVersion((n) => n + 1);
+    } catch (error) {
+      setNote(errorMessage(error));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <li class="rgb-addtoset">
+      <button type="button" class="link-btn" aria-expanded={open} onClick={() => setOpen((on) => !on)}>Add to set…</button>
+      {open && gate !== 'ok' && (
+        <p class="muted rgb-note">
+          {gate === 'checking' ? 'Checking your RedGifs login…' : <a href={LOGIN_URL} target="_blank" rel="noopener noreferrer">Log in on RedGifs to use sets</a>}
+        </p>
+      )}
+      {open && gate === 'ok' && (
+        <div data-version={version}>
+          {sets.status === 'loading' && <p class="muted rgb-note">Loading your sets…</p>}
+          {sets.status === 'error' && <p class="error rgb-note">{sets.message}</p>}
+          {sets.status === 'ok' && sets.list.length === 0 && <p class="muted rgb-note">You have no sets yet.</p>}
+          {sets.status === 'ok' && sets.list.length > 0 && (
+            <ul class="rgb-list rgb-setlist">
+              {sets.list.map((set) => (
+                <li key={set.id}>
+                  <a href={hrefFor({ name: 'set', id: set.id, tags: '', page: 1 })} title="Open this set">{set.name}</a>
+                  {' '}
+                  {setMembership.has(gifId, set.id)
+                    ? <span class="rgb-added" title="Added to this set">✓</span>
+                    : <button type="button" class="link-btn" disabled={busy !== null} onClick={() => { void add(set); }}>add</button>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {naming === null
+            ? <button type="button" class="link-btn" onClick={() => setNaming('')}>New set…</button>
+            : (
+              <form class="rgb-newset" onSubmit={(e) => { e.preventDefault(); void createAndAdd(); }}>
+                <input type="text" placeholder="Set name" value={naming} maxLength={100} onInput={(e) => setNaming(e.currentTarget.value)} />
+                <button type="submit" disabled={busy !== null}>Create and add</button>
+                <button type="button" onClick={() => { setNaming(null); setNote(null); }}>Cancel</button>
+              </form>
+            )}
+          {note && <p class="error rgb-note">{note}</p>}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function OptionsSection({ api, gif }: { api: RedgifsApi; gif: Gif }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -552,6 +682,8 @@ function OptionsSection({ gif }: { gif: Gif }) {
     <section>
       <h2>Options</h2>
       <ul class="rgb-list rgb-options">
+        <FavoriteOption id={gif.id} />
+        <AddToSet api={api} gifId={gif.id} />
         <li><a href={redgifsWatchUrl(gif.id)} target="_blank" rel="noopener noreferrer">Open on RedGifs</a></li>
         {hd && (
           <li>

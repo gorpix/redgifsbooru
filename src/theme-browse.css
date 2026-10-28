@@ -77,3 +77,70 @@
 @media (max-width: 800px) {
   .rgb-profile { flex-direction: column; }
 }
+
+/* ---- phase 5: account (header indicator, favorites, follows, sets) ---- */
+.rgb-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.rgb-site { line-height: 1.2; }
+.rgb-account { margin-left: auto; font-size: 0.9em; display: flex; align-items: center; }
+.rgb-account a { padding: 2px 8px; border: 1px solid var(--accent); background: var(--panel); }
+.rgb-account a.error { color: #ff9a9a; }
+
+/* The thumbnail's heart: top-right over the image, shown on hover (or focus); filled and always shown when liked. */
+.thumb { position: relative; }
+.thumb-fav {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  margin: 0;
+  padding: 0 5px;
+  line-height: 1.5;
+  font-size: 1.1em;
+  background: rgba(26, 6, 8, 0.72);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--text);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.thumb:hover .thumb-fav, .thumb-fav:focus-visible { opacity: 1; }
+.thumb-fav.on { opacity: 1; color: #ff5c78; }
+.thumb-fav:hover { background: rgba(122, 26, 34, 0.9); }
+@media (hover: none) { .thumb-fav { opacity: 0.85; } }
+.thumb-note {
+  position: absolute;
+  top: 28px;
+  left: 3px;
+  right: 3px;
+  padding: 2px 4px;
+  font-size: 0.8em;
+  background: var(--header);
+  border: 1px solid var(--accent);
+  z-index: 2;
+}
+.thumb-note.error { color: #ff9a9a; }
+.thumb-remove { padding: 2px 2px 0; font-size: 0.8em; }
+.thumb-remove button.link-btn { color: #ff9a9a; }
+
+.rgb-inline-note { font-size: 0.9em; }
+.rgb-inline-note.error { color: #ff9a9a; }
+.rgb-follow button { margin: 0; padding: 1px 8px; }
+.rgb-follow button.link-btn { padding: 0; }
+.rgb-follow-row { margin-left: 4px; }
+.rgb-profile-name .rgb-follow { font-weight: normal; font-size: 0.8em; }
+
+/* Sets */
+.rgb-sets .rgb-set-desc { font-size: 0.9em; white-space: pre-wrap; word-break: break-word; }
+.rgb-sets .rgb-set-actions { white-space: nowrap; }
+.rgb-following .num { text-align: right; }
+.rgb-setform { max-width: 520px; margin: 0 0 8px; }
+.rgb-setform label { display: block; margin: 0 0 6px; }
+.rgb-setform label.rgb-check { display: flex; align-items: center; gap: 4px; }
+.rgb-setform textarea { display: block; margin-top: 2px; }
+.rgb-setform input[type='text'] { display: block; margin-top: 2px; }
+.rgb-setform p { margin: 0; }
+.rgb-set-head { margin: 0 0 8px; }
+.rgb-addtoset .rgb-setlist { margin: 4px 0; }
+.rgb-addtoset .rgb-added { color: #8fd68f; font-weight: bold; }
+.rgb-newset { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 0; }
+.rgb-newset input[type='text'] { flex: 1 1 100%; }
+.rgb-newset button { margin-top: 0; }

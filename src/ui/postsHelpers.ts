@@ -13,10 +13,35 @@ export function djb2Hex(text: string): string {
   return h.toString(16);
 }
 
-/** Where a grid's posts come from: the global search, one creator's posts, or one niche's posts. */
-export type Source = { kind: 'search' } | { kind: 'user'; name: string } | { kind: 'niche'; id: string };
+/**
+ * Where a grid's posts come from: the global search, one creator's posts, one niche's posts, my
+ * favorites (`fav:me`) or one of my sets (RedGifs collections).
+ */
+export type Source =
+  | { kind: 'search' }
+  | { kind: 'user'; name: string }
+  | { kind: 'niche'; id: string }
+  | { kind: 'liked' }
+  /** The newest posts of the creators I follow; `names` = their usernames (filled in by the pipeline). */
+  | { kind: 'following'; names?: string[] }
+  | { kind: 'set'; id: string };
 
 export const SEARCH_SOURCE: Source = { kind: 'search' };
+export const LIKED_SOURCE: Source = { kind: 'liked' };
+export const FOLLOWING_SOURCE: Source = { kind: 'following' };
+
+/** Per-set counters bumped when a set's posts change, so its grid and post page rebuild their fillers. */
+const setRevisions = new Map<string, number>();
+
+export function setRevision(id: string): number {
+  return setRevisions.get(id.trim().toLowerCase()) ?? 0;
+}
+
+/** Call after adding to / removing from a set: the next sourceKey of that set is a new one. */
+export function bumpSetRevision(id: string): void {
+  const key = id.trim().toLowerCase();
+  setRevisions.set(key, (setRevisions.get(key) ?? 0) + 1);
+}
 
 /** Stable text for a source; '' for the global search so its filler ids stay as they were. */
 export function sourceKey(source: Source): string {
@@ -24,12 +49,28 @@ export function sourceKey(source: Source): string {
     case 'search': return '';
     case 'user': return `user:${source.name.trim().toLowerCase()}`;
     case 'niche': return `niche:${source.id.trim().toLowerCase()}`;
+    case 'liked': return 'liked';
+    case 'following': return source.names ? `following:${djb2Hex([...source.names].map((n) => n.toLowerCase()).sort().join(','))}` : 'following';
+    case 'set': {
+      const rev = setRevision(source.id);
+      return `set:${source.id.trim().toLowerCase()}${rev ? `#${rev}` : ''}`;
+    }
   }
+}
+
+/** The source a query really reads: a `fav:me` search on the global search reads my favorites. */
+export function effectiveSource(query: Query, source: Source): Source {
+  return query.fav && source.kind === 'search' ? LIKED_SOURCE : source;
+}
+
+/** Sources that need a RedGifs login to read. */
+export function sourceNeedsLogin(source: Source): boolean {
+  return source.kind === 'liked' || source.kind === 'set' || source.kind === 'following';
 }
 
 /**
  * `mergeSig` (see mergeSignature) is appended only when some searched tag is merged; `src` (see
- * sourceKey) only for creator and niche streams.
+ * sourceKey) only for non-search streams.
  */
 export function fillerId(queryKeyText: string, type: string, pageSize: number, ruleKeys: string[], mergeSig = '', src = ''): string {
   let id = `${queryKeyText}|${type}|${pageSize}|bl:${[...ruleKeys].sort().join(',')}`;
@@ -289,7 +330,7 @@ export function rankSidebarTags(input: RankInput): SidebarRow[] {
 
 /** The alias the query text uses for a page sort, e.g. "order:views". */
 export function pageSortAlias(query: Query, sort: PageSort): string {
-  return formatQuery({ ...query, required: [], any: [], exclusions: [], meta: [], type: 'g', serverOrder: 'trending', pageSort: sort });
+  return formatQuery({ ...query, required: [], any: [], exclusions: [], meta: [], type: 'g', serverOrder: 'trending', pageSort: sort, fav: false });
 }
 
 export function errorMessage(error: unknown): string {

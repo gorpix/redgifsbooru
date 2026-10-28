@@ -1,8 +1,10 @@
 // Every RedGifs API call goes through here: guard, cache, queue, token,
 // retries and rate-limit backoff. When RedGifs changes, this is where to fix.
+import { AccountApi } from './account';
+import type { AuthManager } from './auth';
 import type { ResponseCache } from './cache';
 import { API_ROOT, isForbiddenUrl } from './guard';
-import { ForbiddenEndpointError, HttpError, RateLimitedError, type Transport } from './http';
+import { ForbiddenEndpointError, HttpError, RateLimitedError, type HttpMethod, type Transport } from './http';
 import { readNiche, readNichesPage, readTagWiki, readUserProfile } from './normalize';
 import { LOW_PAUSED_KEY, RATE_LIMIT_KEY, writeStoredMax } from './budget';
 import { RequestQueue, realClock, type Clock } from './queue';
@@ -22,6 +24,25 @@ const LOW_PAUSE_MS = 15 * 60_000;
 const DEFAULT_TTL_MS = 10 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
+
+/** Personalized responses are kept in memory at most this long, never in IndexedDB. */
+const PERSONAL_TTL_MS = 60_000;
+
+/** Responses that depend on who is logged in: never written to the persistent cache. */
+const PERSONAL_PATHS = [/^\/v1\/me(\/|$)/, /^\/v2\/me(\/|$)/, /^\/v2\/likes(\/|$)/, /^\/v2\/feeds\/liked(\/|$)/];
+export const isPersonalPath = (pathname: string): boolean => PERSONAL_PATHS.some((p) => p.test(pathname));
+
+/** The only paths the booru writes to: likes, follows and my collections. */
+const WRITABLE_PATHS = [/^\/v2\/gifs\/[^/]+\/like$/, /^\/v1\/me\/follows\/[^/]+$/, /^\/v2\/me\/collections(\/|$)/];
+export const isWritablePath = (pathname: string): boolean => WRITABLE_PATHS.some((p) => p.test(pathname));
+
+/** Memoized personal reads that a write to `pathname` makes stale (path prefixes). */
+function staleAfterWrite(pathname: string): string[] {
+  if (/^\/v2\/gifs\/[^/]+\/like$/.test(pathname)) return ['/v2/likes', '/v2/feeds/liked'];
+  if (pathname.startsWith('/v1/me/follows')) return ['/v1/me/follows', '/v2/me/following'];
+  if (pathname.startsWith('/v2/me/collections')) return ['/v2/me/collections'];
+  return ['/v1/me', '/v2/me', '/v2/likes', '/v2/feeds/liked'];
+}
 
 const abortError = () => new DOMException('Aborted', 'AbortError');
 
@@ -46,7 +67,10 @@ export interface RequestEvent {
 export interface ApiOptions {
   transport: Transport;
   cache?: ResponseCache | null;
+  /** Guest token source (used when nobody is logged in). */
   tokens?: TokenManager;
+  /** Login: its id_token is used when logged in. */
+  auth?: AuthManager | null;
   queue?: RequestQueue;
   /** Where 429 pauses are shared with other tabs (localStorage); none by default. */
   storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
@@ -102,6 +126,13 @@ export class RedgifsApi {
   private readonly transport: Transport;
   private readonly cache: ResponseCache | null;
   private readonly tokens: TokenManager;
+  private readonly auth: AuthManager | null;
+  /** Personal reads, in memory only: key -> data, pathname (for invalidation) and time. */
+  private readonly memo = new Map<string, { data: unknown; path: string; at: number }>();
+  /** Bumped when personal data goes stale, so a read that started before is not memoized. */
+  private epoch = 0;
+  /** My likes, follows and collections. */
+  readonly account: AccountApi;
   private readonly queue: RequestQueue;
   private readonly clock: Clock;
   private readonly storage: Pick<Storage, 'getItem' | 'setItem'> | null;
@@ -118,6 +149,13 @@ export class RedgifsApi {
     this.clock = options.clock ?? realClock;
     this.storage = options.storage ?? null;
     this.tokens = options.tokens ?? new TokenManager(this.transport, null, () => this.clock.now());
+    this.auth = options.auth ?? null;
+    this.account = new AccountApi(this);
+    if (this.auth) {
+      this.auth.setUsernameLoader(async () => (await this.account.me()).username);
+      // A login, logout or account switch makes every personal response stale.
+      this.auth.subscribe(() => this.invalidatePersonal(null));
+    }
     this.queue = options.queue ?? new RequestQueue({ clock: this.clock });
     this.backoffMs = options.backoffMs ?? DEFAULT_BACKOFF_MS;
     this.timeoutMs = options.timeoutMs ?? 15_000;
@@ -149,7 +187,10 @@ export class RedgifsApi {
     if (isForbiddenUrl(url)) throw new ForbiddenEndpointError(url);
     if (signal?.aborted) throw abortError();
 
-    if (ttlMs > 0 && this.cache) {
+    if (isPersonalPath(new URL(url).pathname)) {
+      const hit = ttlMs > 0 ? this.memo.get(url) : undefined;
+      if (hit && this.clock.now() - hit.at <= Math.min(ttlMs, PERSONAL_TTL_MS)) return hit.data as T;
+    } else if (ttlMs > 0 && this.cache) {
       const cached = await this.cache.get<T>(url, ttlMs).catch(() => undefined);
       if (cached !== undefined) return cached;
       if (signal?.aborted) throw abortError();
@@ -182,7 +223,39 @@ export class RedgifsApi {
     const controller = new AbortController();
     const entry: InFlight<T> = { promise: undefined as unknown as Promise<T>, controller, callers: 0, started: false };
 
-    // Timing and outcome for the debug hook (onRequest). Uses the injected clock.
+    const { pathname } = new URL(url);
+    const personal = isPersonalPath(pathname);
+    const epoch = this.epoch;
+    const { context, markStarted, wasStarted, report } = this.reporter(url, priority);
+
+    entry.promise = this.queue.run(() => {
+      entry.started = true;
+      markStarted();
+      return this.request<T>(url, context, { personal });
+    }, { priority, signal: controller.signal }).then(
+      async (data) => {
+        report('ok');
+        if (personal) {
+          // Memory only, and only if nothing made it stale meanwhile.
+          if (epoch === this.epoch) this.memo.set(url, { data, path: pathname, at: this.clock.now() });
+        } else if (this.cache) {
+          await this.cache.set(url, data).catch(() => undefined);
+        }
+        return data;
+      },
+      (error: unknown) => {
+        report(wasStarted() ? 'error' : 'aborted', error);
+        throw error;
+      },
+    ).finally(() => {
+      if (this.inFlight.get(url) === entry) this.inFlight.delete(url);
+    });
+    this.inFlight.set(url, entry);
+    return entry;
+  }
+
+  /** Timing and outcome for the debug hook (onRequest). Uses the injected clock. */
+  private reporter(url: string, priority: GetOptions['priority']) {
     const { pathname, search } = new URL(url);
     const createdAt = this.clock.now();
     const context: RequestContext = { rateLimited: false };
@@ -206,54 +279,118 @@ export class RedgifsApi {
         // A debug hook must never break a request.
       }
     };
-
-    entry.promise = this.queue.run(() => {
-      entry.started = true;
-      startedAt = this.clock.now();
-      return this.request<T>(url, context);
-    }, { priority, signal: controller.signal }).then(
-      async (data) => {
-        report('ok');
-        if (this.cache) await this.cache.set(url, data).catch(() => undefined);
-        return data;
-      },
-      (error: unknown) => {
-        report(startedAt === undefined ? 'aborted' : 'error', error);
-        throw error;
-      },
-    ).finally(() => {
-      if (this.inFlight.get(url) === entry) this.inFlight.delete(url);
-    });
-    this.inFlight.set(url, entry);
-    return entry;
+    return {
+      context,
+      report,
+      markStarted: () => { startedAt = this.clock.now(); },
+      wasStarted: () => startedAt !== undefined,
+    };
   }
 
-  private async request<T>(url: string, context: RequestContext): Promise<T> {
+  /** Drops memoized personal reads (all, or those under the given path prefixes) and in-flight ones. */
+  private invalidatePersonal(prefixes: string[] | null): void {
+    this.epoch += 1;
+    const stale = (path: string) => prefixes === null || prefixes.some((p) => path.startsWith(p));
+    for (const [key, entry] of [...this.memo]) if (stale(entry.path)) this.memo.delete(key);
+    for (const url of [...this.inFlight.keys()]) {
+      const { pathname } = new URL(url);
+      if (isPersonalPath(pathname) && stale(pathname)) this.inFlight.delete(url);
+    }
+  }
+
+  /**
+   * Write to my account (likes, follows, collections): PUT/POST/PATCH/DELETE with an optional
+   * JSON body. High priority, through the queue and budget, never cached or de-duplicated, and
+   * NEVER retried automatically, except once after a 401 when the login token is refreshed.
+   * Needs a logged-in user (else HttpError 401). Related memoized reads are dropped afterwards.
+   * Resolves with the parsed JSON reply, or null when it has none.
+   */
+  async send<T = unknown>(method: Exclude<HttpMethod, 'GET'>, path: string, body?: unknown, { signal }: { signal?: AbortSignal } = {}): Promise<T | null> {
+    const url = buildUrl(path);
+    const { pathname } = new URL(url);
+    if (isForbiddenUrl(url) || !isWritablePath(pathname)) throw new ForbiddenEndpointError(url);
+    if (signal?.aborted) throw abortError();
+    const { context, markStarted, wasStarted, report } = this.reporter(url, 'high');
+    try {
+      const data = await this.queue.run(() => {
+        markStarted();
+        return this.request<T | null>(url, context, { method, body, write: true });
+      }, { priority: 'high', signal });
+      report('ok');
+      return data;
+    } catch (error) {
+      report(wasStarted() ? 'error' : 'aborted', error);
+      throw error;
+    } finally {
+      // Even a failed write may have gone through, so reads are refetched either way.
+      this.invalidatePersonal(staleAfterWrite(pathname));
+    }
+  }
+
+  private async request<T>(
+    url: string,
+    context: RequestContext,
+    { method = 'GET', body, personal = false, write = false }: { method?: HttpMethod; body?: unknown; personal?: boolean; write?: boolean } = {},
+  ): Promise<T> {
     let authFailures = 0;
     let rateLimitHits = 0;
     let transientFailures = 0;
     let refresh = false;
+    let userRetried = false;
 
     for (;;) {
-      const token = await this.tokens.get(refresh);
+      // The login token when logged in (always for personal reads and writes), else the guest token.
+      let token: string | null = null;
+      if (this.auth && (write || personal || this.auth.state === 'loggedIn')) token = await this.auth.getToken();
+      const isUser = token !== null;
+      if (token === null) {
+        if (write || personal) throw new HttpError(401, url);
+        token = await this.tokens.get(refresh);
+      }
       refresh = false;
       let status: number;
       let text = '';
       try {
         ({ status, text } = await this.transport({
+          ...(write ? { method, ...(body === undefined ? {} : { body }) } : {}),
           url,
           headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
           timeoutMs: this.timeoutMs,
         }));
       } catch (error) {
-        if (transientFailures++ >= MAX_TRANSIENT_RETRIES) throw error;
+        if (write || transientFailures++ >= MAX_TRANSIENT_RETRIES) throw error;
         await this.clock.sleep(TRANSIENT_RETRY_MS);
         continue;
       }
 
       if (status >= 200 && status < 300) {
         if (this.status.rateLimitedUntil) this.setStatus({ rateLimitedUntil: 0, gaveUp: false });
+        if (write) {
+          try { return (text.trim() ? JSON.parse(text) : null) as T; } catch { return null as T; }
+        }
         return JSON.parse(text) as T;
+      }
+      if (isUser && status === 401) {
+        if (userRetried) {
+          // A fresh token was refused too: report it, but never log out.
+          this.auth!.markError();
+          if (write || personal) throw new HttpError(401, url);
+          continue; // public reads carry on as a guest
+        }
+        userRetried = true;
+        await this.auth!.refresh(true);
+        continue;
+      }
+      if (write || (isUser && status === 403)) {
+        if (status === 429) {
+          const retryAt = this.clock.now() + this.backoffMs[0];
+          this.queue.pauseUntil(retryAt);
+          writeStoredMax(this.storage, RATE_LIMIT_KEY, retryAt);
+          this.setStatus({ rateLimitedUntil: retryAt, gaveUp: false });
+          context.rateLimited = true;
+          throw new RateLimitedError(url, retryAt);
+        }
+        throw new HttpError(status, url);
       }
       if (status === 401 || status === 403) {
         if (++authFailures >= MAX_AUTH_ATTEMPTS) throw new HttpError(status, url);
