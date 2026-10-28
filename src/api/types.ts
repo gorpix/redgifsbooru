@@ -24,6 +24,8 @@ export interface Gif {
   type: number;
   tags: string[];
   niches: string[];
+  /** RedGifs' orientation labels (lesbian, gay, straight, bisexual, trans, animated); read defensively. */
+  sexuality?: string[];
   description: string | null;
   avgColor?: string;
   verified: boolean;

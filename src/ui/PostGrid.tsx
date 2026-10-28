@@ -126,6 +126,7 @@ export function PostGrid({ grid, tags, linkTo = postsLink, src = '', thumbAction
 
   const progress = state ? progressText(state) : null;
   const blacklisted = state?.rejected.blacklist ?? 0;
+  const filtered = (state?.rejected.untagged ?? 0) + (state?.rejected.ungendered ?? 0);
   const showPaginator = !!state && state.phase !== 'error' && (posts.length > 0 || page > 1);
 
   return (
@@ -151,6 +152,9 @@ export function PostGrid({ grid, tags, linkTo = postsLink, src = '', thumbAction
           {progress}
           {state.phase === 'done' && state.posts.length === 0 && blacklisted > 0 && (
             <> {blacklisted} {blacklisted === 1 ? 'post was' : 'posts were'} hidden by your blacklist.</>
+          )}
+          {state.phase === 'done' && state.posts.length === 0 && filtered > 0 && (
+            <> {filtered} {filtered === 1 ? 'post was' : 'posts were'} hidden by your content filters.</>
           )}
           {state.phase === 'paused' && <> <button type="button" onClick={grid.rescan}>Keep scanning</button></>}
           {state.phase === 'error' && <> <button type="button" onClick={grid.rescan}>Retry</button></>}

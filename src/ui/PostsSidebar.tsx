@@ -8,7 +8,7 @@ import type { MergeIndex } from '../search/merges';
 import { formatQuery, type Query } from '../search/query';
 import { getPausedKeys, setPausedKeys, subscribeBlacklist } from '../store/blacklist';
 import { getSavedSearches, removeSavedSearch, saveSearch, subscribeSaved } from '../store/saved';
-import { updateSettings } from '../store/settings';
+import { getSettings, subscribeSettings, updateSettings } from '../store/settings';
 import { formatCount } from './format';
 import { useSubscription } from './hooks';
 import { aggregateTags, estimateSearchSize, groupGlobalCount, groupNames, needsGroupCounts, pickCountLookups, rankSidebarTags, sidebarCandidates } from './postsHelpers';
@@ -123,6 +123,36 @@ export function TagList({ posts, query, queryText, tagCounts, canonical, index, 
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** Content filters (hide untagged / ungendered posts), shown directly above the blacklist. */
+export function FiltersPanel({ rejected }: { rejected: Record<string, number> | null }) {
+  const version = useSubscription(subscribeSettings);
+  const settings = useMemo(() => getSettings(), [version]);
+  const hiddenNote = (n: number | undefined) => (rejected && n ? <span class="muted"> ({n} hidden here)</span> : null);
+  return (
+    <section>
+      <h2>Filters</h2>
+      <p>
+        <label class="rgb-filter-check">
+          <input type="checkbox" checked={settings.hideUntagged} onChange={(e) => updateSettings({ hideUntagged: (e.currentTarget as HTMLInputElement).checked })} />
+          <span>
+            Hide untagged posts
+            {settings.hideUntagged && hiddenNote(rejected?.untagged)}
+          </span>
+        </label>
+      </p>
+      <p>
+        <label class="rgb-filter-check">
+          <input type="checkbox" checked={settings.hideUngendered} onChange={(e) => updateSettings({ hideUngendered: (e.currentTarget as HTMLInputElement).checked })} />
+          <span>
+            Hide posts without a gender tag
+            {settings.hideUngendered && hiddenNote(rejected?.ungendered)}
+          </span>
+        </label>
+      </p>
     </section>
   );
 }

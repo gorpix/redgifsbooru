@@ -144,3 +144,9 @@
 .rgb-newset { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 0; }
 .rgb-newset input[type='text'] { flex: 1 1 100%; }
 .rgb-newset button { margin-top: 0; }
+
+/* Checkbox rows: box on the left, vertically centred on the whole label;
+   the text sits in its own block so wrapped lines align with the first line. */
+/* gap matches the panels' 8px left inset, so box-to-text equals border-to-box */
+.rgb-filter-check { display: flex; align-items: center; gap: 8px; }
+.rgb-filter-check > input[type='checkbox'] { flex: none; margin: 0; }

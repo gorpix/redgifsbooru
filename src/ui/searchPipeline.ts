@@ -22,20 +22,23 @@ import { aliasBlacklist, applyAliases, buildAliasMap } from '../search/aliases';
 import { BUILTIN_ALIASES } from '../search/builtinAliases';
 import { BUILTIN_MERGES } from '../search/builtinMerges';
 import { PageFiller, type FetchStreamPage } from '../search/filler';
-import { checkGif, parseBlacklist, type BlacklistRule } from '../search/match';
+import { BUILTIN_IMPLICATIONS } from '../search/builtinImplications';
+import { buildImplicationMap, implicationSignature, parseImplicationText, type ImplicationMap } from '../search/implications';
+import { checkGif, parseBlacklist, type BlacklistRule, type ContentFilters } from '../search/match';
 import { applyMerges, buildMergeIndex, mergeBlacklist, parseMergeText, type MergeIndex } from '../search/merges';
 import { formatQuery, parseQuery, queryKey, type Query } from '../search/query';
 import { serverStreams } from '../search/server';
 import { combineStreams } from '../search/streams';
 import { getAliasText, parseAliasText, subscribeAliases } from '../store/aliases';
 import { getBlacklistText, getPausedKeys, subscribeBlacklist } from '../store/blacklist';
+import { getImplicationText, subscribeImplications } from '../store/implications';
 import { getMergeText, subscribeMerges } from '../store/merges';
 import { defaultStorage } from '../store/storage';
 import { getSettings, subscribeSettings, type Settings } from '../store/settings';
 import { getFiller, type FillerEntry } from './fillers';
 import { useFollowedNames } from './account';
 import { useSubscription } from './hooks';
-import { djb2Hex, effectiveSource, fillerId, mergeSignature, SEARCH_SOURCE, sourceKey, type Source } from './postsHelpers';
+import { djb2Hex, effectiveSource, fillerId, filterSignature, mergeSignature, SEARCH_SOURCE, sourceKey, type Source } from './postsHelpers';
 
 export type { Source } from './postsHelpers';
 
@@ -107,8 +110,8 @@ export function validationKeys(query: Query): string[] {
 }
 
 /** Key of the shared PageFiller for this search. */
-export function pipelineFillerId(query: Query, pageSize: number, rules: BlacklistRule[], mergeIndex: MergeIndex, source: Source = SEARCH_SOURCE): string {
-  return fillerId(queryKey(query), query.type, pageSize, rules.map((r) => r.key), mergeSignature(query, mergeIndex), sourceKey(source));
+export function pipelineFillerId(query: Query, pageSize: number, rules: BlacklistRule[], mergeIndex: MergeIndex, source: Source = SEARCH_SOURCE, filterSig = ''): string {
+  return fillerId(queryKey(query), query.type, pageSize, rules.map((r) => r.key), mergeSignature(query, mergeIndex), sourceKey(source), filterSig);
 }
 
 /**
@@ -130,10 +133,12 @@ export interface EntryInput {
   canonical?: Map<string, string>;
   /** Where the posts come from (default: the global search). */
   source?: Source;
+  /** Hide-untagged / hide-ungendered filters (default: none). */
+  filters?: ContentFilters;
 }
 
 /** The shared FillerEntry for `id`, creating it (stream fetchers, combineStreams, checks) the first time. */
-export function buildFillerEntry({ api, id, query, rules, mergeIndex, pageSize, canonical, source = SEARCH_SOURCE }: EntryInput): FillerEntry {
+export function buildFillerEntry({ api, id, query, rules, mergeIndex, pageSize, canonical, source = SEARCH_SOURCE, filters }: EntryInput): FillerEntry {
   const spelled = (key: string) => canonical?.get(key) ?? key;
   const { serverOrder: order, type } = query;
   // A niche, my favorites and a set cannot be filtered by tag on the server: one stream, every
@@ -181,7 +186,7 @@ export function buildFillerEntry({ api, id, query, rules, mergeIndex, pageSize, 
     maxServerPagesPerRun: MAX_SERVER_PAGES_PER_RUN,
     storage: session(),
     fetchPage: combineStreams(fetchers, source.kind === 'following' ? 'latest' : order),
-    check: (gif) => checkGif(gif, query, rules, now(), mergeIndex),
+    check: (gif) => checkGif(gif, query, rules, now(), mergeIndex, filters),
   }));
 }
 
@@ -205,6 +210,8 @@ export interface SearchPipeline extends DerivedQuery {
   allRules: BlacklistRule[];
   /** The rules in effect for the search. */
   rules: BlacklistRule[];
+  /** The hide-untagged / hide-ungendered filters in effect. */
+  filters: ContentFilters;
   /** The source the grid really reads (a `fav:me` search reads my favorites). */
   source: Source;
   /** Filler id: identifies the shared PageFiller. */
@@ -260,6 +267,20 @@ export function useSearchPipeline(
     [allRules, settings.blacklistEnabled, blacklistVersion],
   );
   const pageSize = settings.postsPerPage;
+  const implicationVersion = useSubscription(subscribeImplications);
+  const implications = useMemo<ImplicationMap | undefined>(
+    () => (settings.hideUngendered ? buildImplicationMap(BUILTIN_IMPLICATIONS, parseImplicationText(getImplicationText())) : undefined),
+    [settings.hideUngendered, implicationVersion],
+  );
+  const filters = useMemo<ContentFilters>(
+    () => ({ hideUntagged: settings.hideUntagged, hideUngendered: settings.hideUngendered, implications }),
+    [settings.hideUntagged, settings.hideUngendered, implications],
+  );
+  // Genders also depend on merge canonical keys, so the user's merge text is part of the hash.
+  const filterSig = useMemo(
+    () => filterSignature(filters, implications ? djb2Hex(`${implicationSignature(implications)}|${getMergeText()}`) : ''),
+    [filters, implications, mergeVersion],
+  );
 
   // Tag validation (every required / ~any tag must exist on RedGifs).
   const keys = useMemo(() => validationKeys(query), [query]);
@@ -297,11 +318,11 @@ export function useSearchPipeline(
     : validated && validated.id === keysId ? validated : null;
   const ready = validation?.kind === 'ok' && enabled && followedReady;
 
-  const id = pipelineFillerId(query, pageSize, rules, mergeIndex, source);
+  const id = pipelineFillerId(query, pageSize, rules, mergeIndex, source, filterSig);
   const entry = useMemo(() => {
     if (!ready) return null;
     const canonical = validation?.kind === 'ok' ? validation.canonical : undefined;
-    return buildFillerEntry({ api, id, query, rules, mergeIndex, pageSize, canonical, source });
+    return buildFillerEntry({ api, id, query, rules, mergeIndex, pageSize, canonical, source, filters });
   }, [ready, id, api]);
 
   return {
@@ -312,6 +333,7 @@ export function useSearchPipeline(
     pageSize,
     allRules,
     rules,
+    filters,
     source,
     id,
     validation,

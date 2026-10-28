@@ -72,11 +72,20 @@ export function sourceNeedsLogin(source: Source): boolean {
  * `mergeSig` (see mergeSignature) is appended only when some searched tag is merged; `src` (see
  * sourceKey) only for non-search streams.
  */
-export function fillerId(queryKeyText: string, type: string, pageSize: number, ruleKeys: string[], mergeSig = '', src = ''): string {
+export function fillerId(queryKeyText: string, type: string, pageSize: number, ruleKeys: string[], mergeSig = '', src = '', filterSig = ''): string {
   let id = `${queryKeyText}|${type}|${pageSize}|bl:${[...ruleKeys].sort().join(',')}`;
   if (mergeSig) id += `|mg:${mergeSig}`;
   if (src) id += `|src:${src}`;
+  if (filterSig) id += `|cf:${filterSig}`;
   return id;
+}
+
+/**
+ * Content-filter part of a filler id: '' when both are off, so ids stay as they were. `genderHash`
+ * (hash of the implications and merges) only matters, and is only included, with hideUngendered.
+ */
+export function filterSignature(f: { hideUntagged: boolean; hideUngendered: boolean }, genderHash = ''): string {
+  return [f.hideUntagged ? 'u' : '', f.hideUngendered ? `g${genderHash}` : ''].filter(Boolean).join(',');
 }
 
 /** The merge groups that affect a query (members of every required / any / exact-excluded key). */

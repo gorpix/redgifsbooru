@@ -2,7 +2,7 @@
 // that stay inside the page's scope and counts estimated from the scope's size (no per-tag lookups).
 import type { TagCounts } from '../api/tagCounts';
 import type { PostGridState } from './PostGrid';
-import { BlacklistPanel, TagList } from './PostsSidebar';
+import { BlacklistPanel, FiltersPanel, TagList } from './PostsSidebar';
 import { hasFilters, matchRate, scopedBaseSize } from './postsHelpers';
 
 interface Props {
@@ -33,6 +33,7 @@ export function ScopedSidebar({ grid, tagCounts, searchHref }: Props) {
         searchHref={searchHref}
         scope={{ size }}
       />
+      <FiltersPanel rejected={state ? state.rejected : null} />
       <BlacklistPanel rules={allRules} enabled={settings.blacklistEnabled} hidden={state ? (state.rejected.blacklist ?? 0) : null} />
     </>
   );

@@ -28,7 +28,7 @@ describe('settings', () => {
     expect(getSettings(fakeStorage({ 'rgb:settings': '{"showRelatedBelow":"yes"}' })).showRelatedBelow).toBe(false);
   });
   it('returns defaults for empty, garbage or blocked storage', () => {
-    const defaults = { postsPerPage: 75, blacklistEnabled: true, showRelatedBelow: false, keepLoggedIn: true };
+    const defaults = { postsPerPage: 75, blacklistEnabled: true, showRelatedBelow: false, keepLoggedIn: true, hideUntagged: false, hideUngendered: false };
     expect(getSettings(fakeStorage())).toEqual(defaults);
     expect(getSettings(fakeStorage({ 'rgb:settings': '{oops' }))).toEqual(defaults);
     expect(getSettings(fakeStorage({ 'rgb:settings': '[1,2]' }))).toEqual(defaults);
@@ -39,9 +39,9 @@ describe('settings', () => {
 
   it('merges patches and persists', () => {
     const storage = fakeStorage();
-    expect(updateSettings({ blacklistEnabled: false }, storage)).toEqual({ postsPerPage: 75, blacklistEnabled: false, showRelatedBelow: false, keepLoggedIn: true });
+    expect(updateSettings({ blacklistEnabled: false }, storage)).toEqual({ postsPerPage: 75, blacklistEnabled: false, showRelatedBelow: false, keepLoggedIn: true, hideUntagged: false, hideUngendered: false });
     updateSettings({ postsPerPage: 50 }, storage);
-    expect(getSettings(storage)).toEqual({ postsPerPage: 50, blacklistEnabled: false, showRelatedBelow: false, keepLoggedIn: true });
+    expect(getSettings(storage)).toEqual({ postsPerPage: 50, blacklistEnabled: false, showRelatedBelow: false, keepLoggedIn: true, hideUntagged: false, hideUngendered: false });
     expect(JSON.parse(storage.data.get('rgb:settings')!)).toEqual(getSettings(storage));
   });
 

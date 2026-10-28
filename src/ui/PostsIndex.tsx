@@ -7,7 +7,7 @@ import { useAuthState } from './account';
 import { gateNotice } from './accountHelpers';
 import { Columns } from './Columns';
 import { PostGrid, usePostGrid } from './PostGrid';
-import { BlacklistPanel, SavedSearches, TagList } from './PostsSidebar';
+import { BlacklistPanel, FiltersPanel, SavedSearches, TagList } from './PostsSidebar';
 import { ScopedSidebar } from './ScopedSidebar';
 import { matchRate } from './postsHelpers';
 import { useSearchPipeline } from './searchPipeline';
@@ -43,6 +43,7 @@ export function PostsIndex({ api, router, tagCounts, route }: Props) {
     <>
       <SavedSearches query={query} />
       <TagList posts={posts} query={query} queryText={queryText} tagCounts={tagCounts} canonical={pipeline.canonical} index={mergeIndex} streamTotals={pipeline.streamTotals()} rate={state ? matchRate(state) : undefined} settled={state?.phase === 'done' || state?.phase === 'paused'} />
+      <FiltersPanel rejected={state ? state.rejected : null} />
       <BlacklistPanel rules={allRules} enabled={settings.blacklistEnabled} hidden={state ? (state.rejected.blacklist ?? 0) : null} />
     </>
   );

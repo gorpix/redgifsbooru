@@ -2,12 +2,14 @@ import { useMemo, useState } from 'preact/hooks';
 import type { TagCounts } from '../api/tagCounts';
 import { BUILTIN_ALIASES } from '../search/builtinAliases';
 import { BUILTIN_CATEGORIES } from '../search/builtinCategories';
+import { BUILTIN_IMPLICATIONS } from '../search/builtinImplications';
 import { BUILTIN_MERGES } from '../search/builtinMerges';
 import { CATEGORIES, CATEGORY_LABEL, CATEGORY_ORDER, type Category } from '../search/categories';
 import { parseMergeText, reorderMergeText } from '../search/merges';
 import { toTagTerm } from '../search/tags';
 import { getAliasText, setAliasText } from '../store/aliases';
 import { getBlacklistText, setBlacklistText } from '../store/blacklist';
+import { getImplicationText, setImplicationText } from '../store/implications';
 import { getCategoryText, setCategoryText } from '../store/categories';
 import { getMergeText, setMergeText } from '../store/merges';
 import { detectRedgifsX, importRedgifsX, type ImportCounts } from '../store/importRedgifsX';
@@ -145,6 +147,16 @@ export function SettingsPage({ tagCounts, auth, api }: { tagCounts: TagCounts; a
     for (const [tag, category] of Object.entries(BUILTIN_CATEGORIES)) out.set(category, [...(out.get(category) ?? []), tag]);
     return CATEGORY_ORDER.filter((c) => out.has(c)).map((c) => ({ category: c, tags: (out.get(c) as string[]).sort() }));
   }, []);
+  const [implText, setImplText] = useState(() => getImplicationText());
+  const [implSaved, setImplSaved] = useState(false);
+  const builtinByGender = useMemo(() => {
+    const groups = new Map<string, string[]>();
+    for (const [tag, genders] of Object.entries(BUILTIN_IMPLICATIONS)) {
+      const label = genders.join(' + ');
+      groups.set(label, [...(groups.get(label) ?? []), tag]);
+    }
+    return [...groups].sort((a, b) => b[1].length - a[1].length).map(([label, tags]) => ({ label, tags: tags.sort() }));
+  }, []);
   const [perPage, setPerPage] = useState<string | null>(null);
 
   const storage = defaultStorage();
@@ -166,6 +178,56 @@ export function SettingsPage({ tagCounts, auth, api }: { tagCounts: TagCounts; a
   return (
     <div class="rgb-settings">
       <h1>Settings</h1>
+
+      <section class="panel">
+        <h2>Filters</h2>
+        <p>
+          <label class="rgb-filter-check">
+            <input
+              type="checkbox"
+              checked={settings.hideUntagged}
+              onChange={(event) => updateSettings({ hideUntagged: (event.currentTarget as HTMLInputElement).checked })}
+            />
+            <span>Hide untagged posts</span>
+          </label>
+        </p>
+        <p>
+          <label class="rgb-filter-check">
+            <input
+              type="checkbox"
+              checked={settings.hideUngendered}
+              onChange={(event) => updateSettings({ hideUngendered: (event.currentTarget as HTMLInputElement).checked })}
+            />
+            <span>Hide posts without a gender tag</span>
+          </label>
+        </p>
+        <h3>Gender implications</h3>
+        <p class="muted">
+          Which tags tell the filter a post shows a female, male or trans person. One per line, like <code>tag -&gt; female</code>,{' '}
+          <code>-&gt; male</code>, <code>-&gt; trans</code> or <code>-&gt; female, male</code>; <code>-&gt; none</code> removes a built-in.
+          Lines starting with # are comments. <code>solo male</code> is male, plain <code>solo</code> implies nothing.
+          RedGifs' sexuality field is used only for posts without tags.
+        </p>
+        <textarea
+          rows={6}
+          value={implText}
+          spellcheck={false}
+          onInput={(event) => { setImplText((event.currentTarget as HTMLTextAreaElement).value); setImplSaved(false); }}
+        />
+        <p>
+          <button type="button" onClick={() => { setImplicationText(implText); setImplSaved(true); }}>Save implications</button>
+          {implSaved && <span class="muted"> Saved.</span>}
+        </p>
+        <details class="rgb-builtin-aliases">
+          <summary>Built-in implications ({Object.keys(BUILTIN_IMPLICATIONS).length})</summary>
+          {builtinByGender.map(({ label, tags }) => (
+            <div key={label}>
+              <h3>{label} ({tags.length})</h3>
+              <p class="muted rgb-cat-tags">{tags.map(toTagTerm).join(', ')}</p>
+            </div>
+          ))}
+        </details>
+      </section>
 
       <section class="panel">
         <h2>Blacklist</h2>

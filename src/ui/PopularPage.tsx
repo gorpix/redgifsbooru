@@ -5,7 +5,7 @@ import { POPULAR_SCALES, hrefFor, type Route, type Router } from '../router';
 import { POPULAR_LABEL, popularTags } from './browseHelpers';
 import { Columns } from './Columns';
 import { PostGrid, usePostGrid } from './PostGrid';
-import { BlacklistPanel, TagList } from './PostsSidebar';
+import { BlacklistPanel, FiltersPanel, TagList } from './PostsSidebar';
 import { matchRate } from './postsHelpers';
 import { useSearchPipeline } from './searchPipeline';
 
@@ -36,6 +36,7 @@ export function PopularPage({ api, router, tagCounts, route }: Props) {
   const sidebar = (
     <>
       <TagList posts={posts} query={query} queryText={queryText} tagCounts={tagCounts} canonical={pipeline.canonical} index={mergeIndex} streamTotals={pipeline.streamTotals()} rate={state ? matchRate(state) : undefined} settled={state?.phase === 'done' || state?.phase === 'paused'} />
+      <FiltersPanel rejected={state ? state.rejected : null} />
       <BlacklistPanel rules={allRules} enabled={settings.blacklistEnabled} hidden={state ? (state.rejected.blacklist ?? 0) : null} />
     </>
   );
