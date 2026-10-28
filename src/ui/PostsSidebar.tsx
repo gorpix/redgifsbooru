@@ -8,6 +8,7 @@ import type { MergeIndex } from '../search/merges';
 import { formatQuery, type Query } from '../search/query';
 import { getPausedKeys, setPausedKeys, subscribeBlacklist } from '../store/blacklist';
 import { getSavedSearches, removeSavedSearch, saveSearch, subscribeSaved } from '../store/saved';
+import { ORIENTATION_CHOICES, type OrientationChoice } from '../search/implications';
 import { getSettings, subscribeSettings, updateSettings } from '../store/settings';
 import { formatCount } from './format';
 import { useSubscription } from './hooks';
@@ -127,7 +128,27 @@ export function TagList({ posts, query, queryText, tagCounts, canonical, index, 
   );
 }
 
-/** Content filters (hide untagged / ungendered posts), shown directly above the blacklist. */
+/** "Show: any · straight · gay · trans": the current choice is bold, the others set it. `hidden` = posts it hides here. */
+export function OrientationChoices({ current, hidden }: { current: OrientationChoice; hidden?: number }) {
+  return (
+    <p class="rgb-orientation">
+      Show:{' '}
+      {ORIENTATION_CHOICES.map((choice, i) => (
+        <>
+          {i > 0 && ' \u00b7 '}
+          {choice === current ? (
+            <strong>{choice}</strong>
+          ) : (
+            <a href="#" onClick={(e) => { e.preventDefault(); updateSettings({ orientation: choice }); }}>{choice}</a>
+          )}
+        </>
+      ))}
+      {hidden ? <span class="muted"> ({hidden} hidden here)</span> : null}
+    </p>
+  );
+}
+
+/** Content filters (hide untagged posts, show one orientation), shown directly above the blacklist. */
 export function FiltersPanel({ rejected }: { rejected: Record<string, number> | null }) {
   const version = useSubscription(subscribeSettings);
   const settings = useMemo(() => getSettings(), [version]);
@@ -144,15 +165,7 @@ export function FiltersPanel({ rejected }: { rejected: Record<string, number> | 
           </span>
         </label>
       </p>
-      <p>
-        <label class="rgb-filter-check">
-          <input type="checkbox" checked={settings.hideUngendered} onChange={(e) => updateSettings({ hideUngendered: (e.currentTarget as HTMLInputElement).checked })} />
-          <span>
-            Hide posts without a gender tag
-            {settings.hideUngendered && hiddenNote(rejected?.ungendered)}
-          </span>
-        </label>
-      </p>
+      <OrientationChoices current={settings.orientation} hidden={settings.orientation !== 'any' ? rejected?.orientation : undefined} />
     </section>
   );
 }

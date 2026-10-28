@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => ({
       userscript: {
         name: 'RedGIFSbooru',
         namespace: 'https://github.com/redgifsbooru',
-        version: '0.6.5',
+        version: '0.6.6',
         description: 'An e621-style booru for RedGifs at /booru/posts. The rest of RedGifs is left alone.',
         author: 'RedGIFsbooru',
         license: 'GPL-3.0-or-later',

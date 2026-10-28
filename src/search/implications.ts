@@ -1,5 +1,5 @@
 // Gender implications: a tag can imply that a post shows a female, a male and/or a trans person.
-// Used by the "hide posts without a gender tag" filter. Pure; storage lives in store/implications.ts.
+// Used to decide a post's orientation (see orientationOf). Pure; storage lives in store/implications.ts.
 import type { MergeIndex } from './merges';
 import { normalizeTag } from './tags';
 
@@ -62,45 +62,49 @@ export function buildImplicationMap(
   return map;
 }
 
-/** RedGifs' `sexuality` values, used only for posts without tags. */
-const SEXUALITY_GENDERS: Readonly<Record<string, readonly Gender[]>> = {
-  lesbian: ['female'],
-  gay: ['male'], // RedGifs files solo male content under gay
-  straight: ['female', 'male'],
-  bisexual: ['female', 'male'],
-  trans: ['trans'],
-};
-
 /**
- * The genders a post shows. With tags: the union of what its tags imply (each tag is also looked
- * up by its merge-canonical key). Without tags (missing or empty): derived from `sexuality`.
- * `tags` and `sexuality` are read defensively; non-strings are ignored.
+ * The genders a post's tags imply (the union of what each tag implies; each tag is also looked up
+ * by its merge-canonical key). `tags` is read defensively; non-strings are ignored.
  */
-export function genderOf(
-  tags: unknown,
-  sexuality: unknown,
-  implications: ImplicationMap,
-  mergeIndex?: MergeIndex,
-): Set<Gender> {
+export function genderOf(tags: unknown, implications: ImplicationMap, mergeIndex?: MergeIndex): Set<Gender> {
   const out = new Set<Gender>();
   const keys = Array.isArray(tags)
     ? tags.filter((t): t is string => typeof t === 'string').map(normalizeTag).filter(Boolean)
     : [];
-  if (keys.length > 0) {
-    for (const key of keys) {
-      for (const k of mergeIndex ? [key, mergeIndex.canonical(key)] : [key]) {
-        for (const g of implications.get(k) ?? []) out.add(g);
-      }
-    }
-    return out;
-  }
-  if (Array.isArray(sexuality)) {
-    for (const s of sexuality) {
-      if (typeof s !== 'string') continue;
-      for (const g of SEXUALITY_GENDERS[s.trim().toLowerCase()] ?? []) out.add(g);
+  for (const key of keys) {
+    for (const k of mergeIndex ? [key, mergeIndex.canonical(key)] : [key]) {
+      for (const g of implications.get(k) ?? []) out.add(g);
     }
   }
   return out;
+}
+
+export type Orientation = 'straight' | 'gay' | 'trans';
+/** The "Show:" choice: one orientation, or `any` (no filtering). */
+export type OrientationChoice = 'any' | Orientation;
+export const ORIENTATION_CHOICES: readonly OrientationChoice[] = ['any', 'straight', 'gay', 'trans'];
+
+/**
+ * A post's category. Trans tags win; otherwise RedGifs' `sexuality` (gay -> gay, straight /
+ * lesbian / bisexual -> straight; 'animated' and unknown values are skipped); otherwise the tag
+ * genders (any female -> straight, only male -> gay). null = cannot tell.
+ */
+export function orientationOf(
+  gif: { tags?: unknown; sexuality?: unknown },
+  implications: ImplicationMap,
+  mergeIndex?: MergeIndex,
+): Orientation | null {
+  const genders = genderOf(gif.tags, implications, mergeIndex);
+  if (genders.has('trans')) return 'trans';
+  if (Array.isArray(gif.sexuality)) {
+    const values = new Set(gif.sexuality.filter((s): s is string => typeof s === 'string').map((s) => s.trim().toLowerCase()));
+    if (values.has('trans')) return 'trans';
+    if (values.has('gay')) return 'gay'; // RedGifs files solo male content under gay
+    if (values.has('straight') || values.has('lesbian') || values.has('bisexual')) return 'straight';
+  }
+  if (genders.has('female')) return 'straight';
+  if (genders.has('male')) return 'gay';
+  return null;
 }
 
 /** Stable text for an implication map (for hashing into a filler id). */

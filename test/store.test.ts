@@ -28,7 +28,7 @@ describe('settings', () => {
     expect(getSettings(fakeStorage({ 'rgb:settings': '{"showRelatedBelow":"yes"}' })).showRelatedBelow).toBe(false);
   });
   it('returns defaults for empty, garbage or blocked storage', () => {
-    const defaults = { postsPerPage: 75, blacklistEnabled: true, showRelatedBelow: false, keepLoggedIn: true, hideUntagged: false, hideUngendered: false };
+    const defaults = { postsPerPage: 75, blacklistEnabled: true, showRelatedBelow: false, keepLoggedIn: true, hideUntagged: false, orientation: 'any' };
     expect(getSettings(fakeStorage())).toEqual(defaults);
     expect(getSettings(fakeStorage({ 'rgb:settings': '{oops' }))).toEqual(defaults);
     expect(getSettings(fakeStorage({ 'rgb:settings': '[1,2]' }))).toEqual(defaults);
@@ -37,11 +37,19 @@ describe('settings', () => {
     expect(getSettings(null)).toEqual(defaults);
   });
 
+  it('keeps a valid orientation, ignores invalid values and the dropped hideUngendered', () => {
+    expect(getSettings(fakeStorage({ 'rgb:settings': '{"orientation":"gay"}' })).orientation).toBe('gay');
+    expect(getSettings(fakeStorage({ 'rgb:settings': '{"orientation":"robot"}' })).orientation).toBe('any');
+    const stale = getSettings(fakeStorage({ 'rgb:settings': '{"hideUngendered":true}' }));
+    expect(stale.orientation).toBe('any');
+    expect('hideUngendered' in stale).toBe(false);
+  });
+
   it('merges patches and persists', () => {
     const storage = fakeStorage();
-    expect(updateSettings({ blacklistEnabled: false }, storage)).toEqual({ postsPerPage: 75, blacklistEnabled: false, showRelatedBelow: false, keepLoggedIn: true, hideUntagged: false, hideUngendered: false });
+    expect(updateSettings({ blacklistEnabled: false }, storage)).toEqual({ postsPerPage: 75, blacklistEnabled: false, showRelatedBelow: false, keepLoggedIn: true, hideUntagged: false, orientation: 'any' });
     updateSettings({ postsPerPage: 50 }, storage);
-    expect(getSettings(storage)).toEqual({ postsPerPage: 50, blacklistEnabled: false, showRelatedBelow: false, keepLoggedIn: true, hideUntagged: false, hideUngendered: false });
+    expect(getSettings(storage)).toEqual({ postsPerPage: 50, blacklistEnabled: false, showRelatedBelow: false, keepLoggedIn: true, hideUntagged: false, orientation: 'any' });
     expect(JSON.parse(storage.data.get('rgb:settings')!)).toEqual(getSettings(storage));
   });
 

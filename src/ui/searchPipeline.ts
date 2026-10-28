@@ -133,7 +133,7 @@ export interface EntryInput {
   canonical?: Map<string, string>;
   /** Where the posts come from (default: the global search). */
   source?: Source;
-  /** Hide-untagged / hide-ungendered filters (default: none). */
+  /** Hide-untagged / orientation filters (default: none). */
   filters?: ContentFilters;
 }
 
@@ -210,7 +210,7 @@ export interface SearchPipeline extends DerivedQuery {
   allRules: BlacklistRule[];
   /** The rules in effect for the search. */
   rules: BlacklistRule[];
-  /** The hide-untagged / hide-ungendered filters in effect. */
+  /** The hide-untagged / orientation filters in effect. */
   filters: ContentFilters;
   /** The source the grid really reads (a `fav:me` search reads my favorites). */
   source: Source;
@@ -269,12 +269,12 @@ export function useSearchPipeline(
   const pageSize = settings.postsPerPage;
   const implicationVersion = useSubscription(subscribeImplications);
   const implications = useMemo<ImplicationMap | undefined>(
-    () => (settings.hideUngendered ? buildImplicationMap(BUILTIN_IMPLICATIONS, parseImplicationText(getImplicationText())) : undefined),
-    [settings.hideUngendered, implicationVersion],
+    () => (settings.orientation !== 'any' ? buildImplicationMap(BUILTIN_IMPLICATIONS, parseImplicationText(getImplicationText())) : undefined),
+    [settings.orientation, implicationVersion],
   );
   const filters = useMemo<ContentFilters>(
-    () => ({ hideUntagged: settings.hideUntagged, hideUngendered: settings.hideUngendered, implications }),
-    [settings.hideUntagged, settings.hideUngendered, implications],
+    () => ({ hideUntagged: settings.hideUntagged, orientation: settings.orientation, implications }),
+    [settings.hideUntagged, settings.orientation, implications],
   );
   // Genders also depend on merge canonical keys, so the user's merge text is part of the hash.
   const filterSig = useMemo(

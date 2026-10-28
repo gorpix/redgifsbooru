@@ -4,6 +4,7 @@ An e621-style booru front end for RedGifs, as a userscript. It replaces RedGifs'
 
 ## Changelog
 
+- **0.6.6**: "Show: any / straight / gay / trans" replaces the gender-tag filter.
 - **0.6.5**: Content filters: hide untagged posts, and posts without a gender tag (via tag implications).
 - **0.6.2**: RedGifs account: favourites (`fav:me`), follows, sets (collections), and a feed of followed creators.
 - **0.5.2**: One-click install and automatic updates from GitHub releases.

@@ -1,3 +1,4 @@
+import { ORIENTATION_CHOICES, type OrientationChoice } from '../search/implications';
 import { createChannel, defaultStorage, readJson, writeJson, type KeyValueStorage } from './storage';
 
 export interface Settings {
@@ -9,12 +10,12 @@ export interface Settings {
   keepLoggedIn: boolean;
   /** Hide posts that have no tags. */
   hideUntagged: boolean;
-  /** Hide posts without a gender (from tag implications; see search/implications.ts). */
-  hideUngendered: boolean;
+  /** Show only this orientation (see orientationOf in search/implications.ts). */
+  orientation: OrientationChoice;
 }
 
 export const SETTINGS_KEY = 'rgb:settings';
-export const DEFAULT_SETTINGS: Settings = { postsPerPage: 75, blacklistEnabled: true, showRelatedBelow: false, keepLoggedIn: true, hideUntagged: false, hideUngendered: false };
+export const DEFAULT_SETTINGS: Settings = { postsPerPage: 75, blacklistEnabled: true, showRelatedBelow: false, keepLoggedIn: true, hideUntagged: false, orientation: 'any' };
 
 const channel = createChannel([SETTINGS_KEY]);
 
@@ -27,7 +28,7 @@ function sanitize(raw: unknown): Settings {
     showRelatedBelow: typeof r.showRelatedBelow === 'boolean' ? r.showRelatedBelow : DEFAULT_SETTINGS.showRelatedBelow,
     keepLoggedIn: typeof r.keepLoggedIn === 'boolean' ? r.keepLoggedIn : DEFAULT_SETTINGS.keepLoggedIn,
     hideUntagged: typeof r.hideUntagged === 'boolean' ? r.hideUntagged : DEFAULT_SETTINGS.hideUntagged,
-    hideUngendered: typeof r.hideUngendered === 'boolean' ? r.hideUngendered : DEFAULT_SETTINGS.hideUngendered,
+    orientation: ORIENTATION_CHOICES.includes(r.orientation as OrientationChoice) ? (r.orientation as OrientationChoice) : DEFAULT_SETTINGS.orientation,
   };
 }
 

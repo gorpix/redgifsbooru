@@ -18,6 +18,7 @@ import { defaultStorage } from '../store/storage';
 import type { AuthManager } from '../api/auth';
 import type { RedgifsApi } from '../api/client';
 import { useAuthState } from './account';
+import { OrientationChoices } from './PostsSidebar';
 import { describeBlockedImport, importBlockedTags } from './accountHelpers';
 import { errorMessage } from './postsHelpers';
 import { formatCount } from './format';
@@ -191,22 +192,13 @@ export function SettingsPage({ tagCounts, auth, api }: { tagCounts: TagCounts; a
             <span>Hide untagged posts</span>
           </label>
         </p>
-        <p>
-          <label class="rgb-filter-check">
-            <input
-              type="checkbox"
-              checked={settings.hideUngendered}
-              onChange={(event) => updateSettings({ hideUngendered: (event.currentTarget as HTMLInputElement).checked })}
-            />
-            <span>Hide posts without a gender tag</span>
-          </label>
-        </p>
+        <OrientationChoices current={settings.orientation} />
         <h3>Gender implications</h3>
         <p class="muted">
-          Which tags tell the filter a post shows a female, male or trans person. One per line, like <code>tag -&gt; female</code>,{' '}
+          Which tags imply a female, male or trans person. They decide the orientation filter (Show: straight / gay / trans)
+          when RedGifs' own category is missing; a trans tag always wins. One per line, like <code>tag -&gt; female</code>,{' '}
           <code>-&gt; male</code>, <code>-&gt; trans</code> or <code>-&gt; female, male</code>; <code>-&gt; none</code> removes a built-in.
           Lines starting with # are comments. <code>solo male</code> is male, plain <code>solo</code> implies nothing.
-          RedGifs' sexuality field is used only for posts without tags.
         </p>
         <textarea
           rows={6}

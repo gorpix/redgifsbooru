@@ -1,6 +1,6 @@
 // Matching posts against a parsed query and the blacklist; page sorting.
 import type { Gif } from '../api/types';
-import { genderOf, type ImplicationMap } from './implications';
+import { orientationOf, type ImplicationMap, type OrientationChoice } from './implications';
 import type { MergeIndex } from './merges';
 import type { MetaFilter, PageSort, Query } from './query';
 import { normalizeTag } from './tags';
@@ -12,13 +12,14 @@ export interface BlacklistRule {
   key: string;
 }
 
-export type Rejection = 'blacklist' | 'untagged' | 'ungendered' | 'exclude' | 'required' | 'any' | 'meta';
+export type Rejection = 'blacklist' | 'untagged' | 'orientation' | 'exclude' | 'required' | 'any' | 'meta';
 
 /** Content filters applied right after the blacklist. */
 export interface ContentFilters {
   hideUntagged: boolean;
-  hideUngendered: boolean;
-  /** Needed for hideUngendered (built-ins + user lines, see buildImplicationMap). */
+  /** `any` (or missing) = no filtering. */
+  orientation?: OrientationChoice;
+  /** Needed for a non-`any` orientation (built-ins + user lines, see buildImplicationMap). */
   implications?: ImplicationMap;
 }
 
@@ -113,8 +114,8 @@ export function checkGif(
 
   if (blacklist.some((r) => hits(r.mode, r.value))) return 'blacklist';
   if (filters?.hideUntagged && keys.length === 0) return 'untagged';
-  if (filters?.hideUngendered && filters.implications && genderOf(gif.tags, gif.sexuality, filters.implications, index).size === 0) {
-    return 'ungendered';
+  if (filters?.orientation && filters.orientation !== 'any' && filters.implications && orientationOf(gif, filters.implications, index) !== filters.orientation) {
+    return 'orientation';
   }
   if (query.exclusions.some((e) => hits(e.mode, e.value))) return 'exclude';
   if (hasTags) {

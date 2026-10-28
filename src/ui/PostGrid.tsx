@@ -126,7 +126,7 @@ export function PostGrid({ grid, tags, linkTo = postsLink, src = '', thumbAction
 
   const progress = state ? progressText(state) : null;
   const blacklisted = state?.rejected.blacklist ?? 0;
-  const filtered = (state?.rejected.untagged ?? 0) + (state?.rejected.ungendered ?? 0);
+  const filtered = (state?.rejected.untagged ?? 0) + (state?.rejected.orientation ?? 0);
   const showPaginator = !!state && state.phase !== 'error' && (posts.length > 0 || page > 1);
 
   return (

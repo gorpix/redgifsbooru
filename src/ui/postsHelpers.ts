@@ -81,11 +81,12 @@ export function fillerId(queryKeyText: string, type: string, pageSize: number, r
 }
 
 /**
- * Content-filter part of a filler id: '' when both are off, so ids stay as they were. `genderHash`
- * (hash of the implications and merges) only matters, and is only included, with hideUngendered.
+ * Content-filter part of a filler id: '' when untagged is off and the orientation is `any`, so ids stay
+ * as they were. `genderHash` (hash of the implications and merges) only matters, and is only
+ * included, with an orientation choice.
  */
-export function filterSignature(f: { hideUntagged: boolean; hideUngendered: boolean }, genderHash = ''): string {
-  return [f.hideUntagged ? 'u' : '', f.hideUngendered ? `g${genderHash}` : ''].filter(Boolean).join(',');
+export function filterSignature(f: { hideUntagged: boolean; orientation?: string }, genderHash = ''): string {
+  return [f.hideUntagged ? 'u' : '', f.orientation && f.orientation !== 'any' ? `o${f.orientation}${genderHash}` : ''].filter(Boolean).join(',');
 }
 
 /** The merge groups that affect a query (members of every required / any / exact-excluded key). */

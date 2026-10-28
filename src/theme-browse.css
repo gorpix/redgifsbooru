@@ -150,3 +150,4 @@
 /* gap matches the panels' 8px left inset, so box-to-text equals border-to-box */
 .rgb-filter-check { display: flex; align-items: center; gap: 8px; }
 .rgb-filter-check > input[type='checkbox'] { flex: none; margin: 0; }
+.rgb-orientation { padding-left: 8px; }
