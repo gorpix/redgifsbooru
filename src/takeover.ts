@@ -41,6 +41,36 @@ function cspMeta(): HTMLMetaElement {
   return meta;
 }
 
+/** The Kinde-SDK header value the booru's own refresh sends (src/api/pageRunner.ts). */
+export const AUTH_MARKER = 'JavaScript/redgifsbooru';
+
+/** Chromium (Chrome, Edge, Brave, Opera…), detected from the user agent. */
+export function isChromium(ua: string = navigator.userAgent): boolean {
+  return /\bChrom(e|ium)\//.test(ua) && !/\bFirefox\//.test(ua);
+}
+
+/** Page-world code that refuses auth2.redgifs.com requests lacking the booru's marker. */
+export function authGuardScript(marker: string = AUTH_MARKER): string {
+  return `(function(){
+var M=${JSON.stringify(marker)},A=/^https?:\\/\\/auth2\\.redgifs\\.com/i,of=window.fetch;
+function hv(h){try{if(!h)return null;if(typeof h.get==='function')return h.get('Kinde-SDK');for(var k in h)if(k.toLowerCase()==='kinde-sdk')return h[k];}catch(e){}return null;}
+window.fetch=function(i,o){try{var u=typeof i==='string'?i:(i&&i.url)||String(i);if(A.test(u)&&hv(o&&o.headers)!==M&&hv(i&&i.headers)!==M)return Promise.reject(new TypeError('Blocked by RedGIFsbooru'));}catch(e){}return of.apply(this,arguments);};
+var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){if(A.test(String(u)))throw new TypeError('Blocked by RedGIFsbooru');return oo.apply(this,arguments);};
+})();`;
+}
+
+function installAuthGuard(parent: Node): void {
+  try {
+    const script = document.createElement('script');
+    script.setAttribute(OWNED_ATTR, '');
+    script.textContent = authGuardScript();
+    parent.appendChild(script);
+    script.remove();
+  } catch {
+    // Without the guard the CSP still blocks everything except auth2.
+  }
+}
+
 export interface TakeoverReport {
   /** document.readyState when the userscript started. */
   readyState: DocumentReadyState;
@@ -80,10 +110,14 @@ export function takeOver(css: string, title: string): { mount: HTMLElement; repo
     if (document.documentElement) document.documentElement.dataset.rgbTakeover = JSON.stringify(report);
   }, true);
 
+  // First, before RedGifs' modules can evaluate: a page-world guard so only the booru's
+  // own login refresh may reach auth2.redgifs.com (RedGifs' Kinde refresh racing ours
+  // could rotate the refresh token and log the user out).
+  installAuthGuard(document.head ?? document.documentElement);
+
   // A meta CSP only takes effect inside <head>, so it goes into RedGifs' head
   // now (before stopping, so re-requests are already blocked) and into ours.
   document.head?.append(cspMeta());
-  window.stop();
 
   const block = (el: Element) => {
     if (el instanceof HTMLScriptElement) el.type = 'javascript/blocked';
@@ -123,8 +157,28 @@ export function takeOver(css: string, title: string): { mount: HTMLElement; repo
   mount.setAttribute(OWNED_ATTR, '');
   body.append(mount);
 
+  // Chromium blocks rendering until every render-blocking stylesheet of the load has
+  // finished, and one cancelled by window.stop() or removed while loading never counts as
+  // finished: the page then never paints (gray). So in Chromium we do NOT stop, and move
+  // RedGifs' stylesheet <link>s into our head with media="not all" so they finish loading
+  // without ever applying. Its scripts may then run; the auth2 guard and CSP make that
+  // harmless (no render without #root, no network except our own auth2 refresh).
+  const stopLoad = !isChromium();
+  if (!stopLoad && old) {
+    for (const link of [...old.querySelectorAll('link[rel="stylesheet"]')]) {
+      link.setAttribute('media', 'not all');
+      link.setAttribute(OWNED_ATTR, '');
+      head.append(link);
+    }
+  }
   if (old) document.replaceChild(html, old);
   else document.appendChild(html);
+  // Stop only AFTER RedGifs' <html> (and its render-blocking stylesheet <link>s) is out of
+  // the document. Chrome never stops waiting for a render-blocking stylesheet that
+  // window.stop() cancels while it is still in the document, and then never paints the
+  // page (seen 2026-11-06: gray page, no animation frames). Nothing runs in between,
+  // so RedGifs' parser cannot advance and the protection is unchanged.
+  if (stopLoad) window.stop();
 
   // Only the document, <html>, <head> and <body> are watched (not the app's
   // own subtree), so this stays cheap while the app renders.
