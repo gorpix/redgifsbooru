@@ -128,21 +128,20 @@ export function TagList({ posts, query, queryText, tagCounts, canonical, index, 
   );
 }
 
-/** "Show: any · straight · gay · trans": the current choice is bold, the others set it. `hidden` = posts it hides here. */
+/** "Show: [any v]": the orientation filter as a dropdown. `hidden` = posts it hides here. */
 export function OrientationChoices({ current, hidden }: { current: OrientationChoice; hidden?: number }) {
   return (
     <p class="rgb-orientation">
-      Show:{' '}
-      {ORIENTATION_CHOICES.map((choice, i) => (
-        <>
-          {i > 0 && ' \u00b7 '}
-          {choice === current ? (
-            <strong>{choice}</strong>
-          ) : (
-            <a href="#" onClick={(e) => { e.preventDefault(); updateSettings({ orientation: choice }); }}>{choice}</a>
-          )}
-        </>
-      ))}
+      <label>
+        Show:{' '}
+        <select
+          class="rgb-orientation-select"
+          value={current}
+          onChange={(e) => updateSettings({ orientation: (e.currentTarget as HTMLSelectElement).value as OrientationChoice })}
+        >
+          {ORIENTATION_CHOICES.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
+        </select>
+      </label>
       {hidden ? <span class="muted"> ({hidden} hidden here)</span> : null}
     </p>
   );

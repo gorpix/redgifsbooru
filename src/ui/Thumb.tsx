@@ -1,9 +1,11 @@
 import type { ComponentChildren } from 'preact';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Gif } from '../api/types';
 import { favoriteScore } from '../search/match';
 import { hrefFor, type PostSrc } from '../router';
 import { useAccount, useAccountToggle } from './account';
 import { LOGIN_URL } from './accountHelpers';
+import { canHoverPreview, previewSrc, schedulePreview } from './hoverPreview';
 import { formatCount, formatDuration, tagToken } from './format';
 
 export function scoreColor(score: number): string {
@@ -55,10 +57,23 @@ export function Thumb({ gif, q = '', page = 1, src: postSrc = '', action }: Thum
   const title = `${tags}\nby ${gif.userName} on ${date}`;
   const src = gif.urls.thumbnail ?? gif.urls.poster;
   const score = favoriteScore(gif);
+  const videoSrc = previewSrc(gif);
+  const [playing, setPlaying] = useState(false);
+  const cancel = useRef<(() => void) | null>(null);
+  const stopPreview = () => { cancel.current?.(); cancel.current = null; };
+  const startPreview = () => {
+    if (!videoSrc || cancel.current || !canHoverPreview()) return;
+    cancel.current = schedulePreview(() => {
+      setPlaying(true);
+      return () => setPlaying(false);
+    });
+  };
+  useEffect(() => stopPreview, []);
   return (
     <article class="thumb">
-      <a href={hrefFor({ name: 'post', id: gif.id, q, page, src: postSrc })} style={gif.avgColor ? { background: gif.avgColor } : undefined}>
+      <a href={hrefFor({ name: 'post', id: gif.id, q, page, src: postSrc })} style={gif.avgColor ? { background: gif.avgColor } : undefined} onMouseEnter={startPreview} onMouseLeave={stopPreview}>
         {src && <img src={src} loading="lazy" alt={tags} title={title} />}
+        {playing && videoSrc && <video class="thumb-preview" src={videoSrc} muted loop autoplay playsInline preload="none" />}
       </a>
       <FavoriteHeart id={gif.id} />
       <div class="thumb-stats">

@@ -8,6 +8,20 @@ export function setGmDownload(fn: GmDownload | null | undefined): void {
   gmDownload = typeof fn === 'function' ? fn : null;
 }
 
+/** GM_download, else GM.download, else null (the caller then opens a tab). */
+export function pickGmDownload(candidates: { gmDownload?: unknown; gmDotDownload?: unknown }): GmDownload | null {
+  if (typeof candidates.gmDownload === 'function') return candidates.gmDownload as GmDownload;
+  if (typeof candidates.gmDotDownload === 'function') {
+    const fn = candidates.gmDotDownload as GmDownload;
+    return (details) => {
+      const result = fn(details);
+      if (result && typeof (result as Promise<unknown>).catch === 'function') (result as Promise<unknown>).catch(() => details.onerror?.());
+      return result;
+    };
+  }
+  return null;
+}
+
 function openInTab(url: string): void {
   window.open(url, '_blank', 'noopener');
 }

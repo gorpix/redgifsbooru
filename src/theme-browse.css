@@ -151,3 +151,13 @@
 .rgb-filter-check { display: flex; align-items: center; gap: 8px; }
 .rgb-filter-check > input[type='checkbox'] { flex: none; margin: 0; }
 .rgb-orientation { padding-left: 8px; }
+
+/* Orientation dropdown ("Show: [any]"): compact, inset like .rgb-filter-check */
+.rgb-orientation-select { font-size: 0.9em; padding: 0 2px; margin: 0; max-width: 100%; }
+
+/* Hover preview: the video fills the thumbnail box like the image; the heart (.thumb-fav) stays above it */
+.thumb > a { position: relative; }
+.thumb-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; background: transparent; pointer-events: none; }
+.thumb-fav, .thumb-note { z-index: 2; }
+
+.rgb-filters-off { padding-left: 8px; }

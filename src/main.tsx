@@ -1,11 +1,11 @@
-import { GM_download, GM_xmlhttpRequest } from '$';
+import { GM, GM_download, GM_xmlhttpRequest } from '$';
 import { render } from 'preact';
 import { RequestBudget } from './api/budget';
 import { createCache } from './api/cache';
 import { AuthManager, type AuthDebugEvent } from './api/auth';
 import { pageRunner } from './api/pageRunner';
 import { RedgifsApi, type ApiOptions, type RequestEvent } from './api/client';
-import { gmTransport, type GmRequest } from './api/http';
+import { createTransport } from './api/http';
 import { RequestQueue } from './api/queue';
 import { TagCounts } from './api/tagCounts';
 import { TokenManager } from './api/token';
@@ -16,7 +16,8 @@ import { takeOver } from './takeover';
 import css from './theme.css?inline';
 import browseCss from './theme-browse.css?inline';
 import { App } from './ui/App';
-import { setGmDownload } from './ui/download';
+import { pickGmDownload, setGmDownload } from './ui/download';
+import { ErrorBoundary, showFatalError } from './ui/ErrorBoundary';
 
 const REQUEST_LOG_MAX = 200;
 
@@ -37,12 +38,29 @@ async function main(): Promise<void> {
     }, 4000);
   }
 
+  try {
+    await start(mount, debug);
+  } catch (error) {
+    console.error('[RedGIFsbooru] startup failed', error);
+    showFatalError(mount, error);
+  }
+}
+
+async function start(mount: HTMLElement, debug: boolean): Promise<void> {
   if (location.pathname === '/booru' || location.pathname === '/booru/') {
     history.replaceState(null, '', `/booru/posts${location.search}`);
   }
 
-  setGmDownload(typeof GM_download === 'function' ? (GM_download as never) : null);
-  const transport = gmTransport(GM_xmlhttpRequest as unknown as GmRequest);
+  // Some managers (Firefox for Android) provide only the GM.* style, or nothing that was not declared.
+  const gmObject = typeof GM === 'undefined' ? undefined : (GM as unknown as Record<string, unknown> | undefined);
+  setGmDownload(pickGmDownload({
+    gmDownload: typeof GM_download === 'function' ? GM_download : undefined,
+    gmDotDownload: gmObject?.download,
+  }));
+  const transport = createTransport({
+    gmXhr: typeof GM_xmlhttpRequest === 'function' ? GM_xmlhttpRequest : undefined,
+    gmDotXhr: gmObject?.xmlHttpRequest,
+  });
   const cache = await createCache();
   // One request budget and rate-limit pause shared by every booru tab, through localStorage.
   const queue = new RequestQueue({ budget: new RequestBudget(localStorage), storage: localStorage });
@@ -81,7 +99,7 @@ async function main(): Promise<void> {
   const router = new Router();
   router.interceptLinks();
   const tagCounts = new TagCounts(api, localStorage);
-  render(<App api={api} router={router} tagCounts={tagCounts} auth={auth} likes={likes} follows={follows} />, mount);
+  render(<ErrorBoundary><App api={api} router={router} tagCounts={tagCounts} auth={auth} likes={likes} follows={follows} /></ErrorBoundary>, mount);
 }
 
 void main();

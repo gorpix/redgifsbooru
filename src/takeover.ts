@@ -19,6 +19,7 @@
 //    that still runs. Userscript code and GM_xmlhttpRequest are exempt.
 // 4. `beforescriptexecute` (Firefox, classic scripts only) and a
 //    MutationObserver block any foreign element that reaches the document.
+//    Plain <style> elements are let through: extensions inject them and they run no code.
 
 export const OWNED_ATTR = 'data-rgb';
 
@@ -191,7 +192,7 @@ export function takeOver(css: string, title: string): { mount: HTMLElement; repo
           node.remove();
           report.blocked.push(describe(node));
           if (!html.isConnected) document.appendChild(html);
-        } else if (node.matches('script, link, iframe, style, meta, object, embed') || record.target === body) {
+        } else if (node.matches('script, link, iframe, meta, object, embed') || record.target === body) {
           block(node);
         }
       }

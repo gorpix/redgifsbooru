@@ -394,3 +394,20 @@ export function scopedBaseSize(totals: (number | undefined)[], filtered: boolean
 export function hasFilters(query: Query): boolean {
   return query.required.length > 0 || query.any.length > 0 || query.exclusions.length > 0 || query.meta.length > 0;
 }
+
+/**
+ * The explanation for an empty page whose posts were all rejected by the blacklist / content
+ * filters: "All 12 posts here are hidden by your filters (blacklist: 8, untagged: 3, Show: 1)."
+ * Parts with no posts are left out. null when nothing was rejected.
+ */
+export function hiddenByFiltersMessage(rejected: Record<string, number>): string | null {
+  const parts: [string, number][] = [
+    ['blacklist', rejected.blacklist ?? 0],
+    ['untagged', rejected.untagged ?? 0],
+    ['Show', rejected.orientation ?? 0],
+  ];
+  const total = parts.reduce((sum, [, n]) => sum + n, 0);
+  if (total === 0) return null;
+  const detail = parts.filter(([, n]) => n > 0).map(([name, n]) => `${name}: ${n}`).join(', ');
+  return `All ${total} ${total === 1 ? 'post' : 'posts'} here ${total === 1 ? 'is' : 'are'} hidden by your filters (${detail}).`;
+}

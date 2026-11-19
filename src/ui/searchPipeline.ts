@@ -223,6 +223,9 @@ export interface SearchPipeline extends DerivedQuery {
   canonical: Map<string, string>;
   /** Shared filler entry; null until `ready`. */
   entry: FillerEntry | null;
+  /** "Show them anyway": the blacklist and content filters are off for this grid (component state, not saved). */
+  filtersOff: boolean;
+  setFiltersOff(off: boolean): void;
   /** Re-runs a failed validation. */
   retryValidation(): void;
   /** RedGifs' page-1 totals of each server stream recorded so far (undefined entries when unknown). */
@@ -255,6 +258,7 @@ export function useSearchPipeline(
   const source: Source = effective.kind === 'following' ? { kind: 'following', names: followed.names } : effective;
   const followedReady = effective.kind !== 'following' || (followed.state === 'ready' && followed.names.length > 0);
 
+  const [filtersOff, setFiltersOff] = useState(false);
   const settingsVersion = useSubscription(subscribeSettings);
   const blacklistVersion = useSubscription(subscribeBlacklist);
   const settings = useMemo(() => getSettings(), [settingsVersion]);
@@ -263,18 +267,18 @@ export function useSearchPipeline(
     [blacklistVersion, aliasMap, mergeIndex],
   );
   const rules = useMemo(
-    () => activeRules(allRules, settings.blacklistEnabled, getPausedKeys()),
-    [allRules, settings.blacklistEnabled, blacklistVersion],
+    () => filtersOff ? [] : activeRules(allRules, settings.blacklistEnabled, getPausedKeys()),
+    [allRules, settings.blacklistEnabled, blacklistVersion, filtersOff],
   );
   const pageSize = settings.postsPerPage;
   const implicationVersion = useSubscription(subscribeImplications);
   const implications = useMemo<ImplicationMap | undefined>(
-    () => (settings.orientation !== 'any' ? buildImplicationMap(BUILTIN_IMPLICATIONS, parseImplicationText(getImplicationText())) : undefined),
-    [settings.orientation, implicationVersion],
+    () => (!filtersOff && settings.orientation !== 'any' ? buildImplicationMap(BUILTIN_IMPLICATIONS, parseImplicationText(getImplicationText())) : undefined),
+    [settings.orientation, implicationVersion, filtersOff],
   );
   const filters = useMemo<ContentFilters>(
-    () => ({ hideUntagged: settings.hideUntagged, orientation: settings.orientation, implications }),
-    [settings.hideUntagged, settings.orientation, implications],
+    () => (filtersOff ? { hideUntagged: false, orientation: 'any' as const } : { hideUntagged: settings.hideUntagged, orientation: settings.orientation, implications }),
+    [settings.hideUntagged, settings.orientation, implications, filtersOff],
   );
   // Genders also depend on merge canonical keys, so the user's merge text is part of the hash.
   const filterSig = useMemo(
@@ -318,7 +322,7 @@ export function useSearchPipeline(
     : validated && validated.id === keysId ? validated : null;
   const ready = validation?.kind === 'ok' && enabled && followedReady;
 
-  const id = pipelineFillerId(query, pageSize, rules, mergeIndex, source, filterSig);
+  const id = pipelineFillerId(query, pageSize, rules, mergeIndex, source, filtersOff ? `${filterSig}|off` : filterSig);
   const entry = useMemo(() => {
     if (!ready) return null;
     const canonical = validation?.kind === 'ok' ? validation.canonical : undefined;
@@ -340,6 +344,8 @@ export function useSearchPipeline(
     ready,
     canonical: validation?.kind === 'ok' ? validation.canonical : EMPTY_CANONICAL,
     entry,
+    filtersOff,
+    setFiltersOff,
     retryValidation: () => { setValidated(null); setRetryTags((n) => n + 1); },
     streamTotals: () => streamTotalsFor(id, query, mergeIndex),
   };

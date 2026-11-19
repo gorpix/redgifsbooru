@@ -13,7 +13,7 @@ import { normalizeTag, toTagTerm } from '../search/tags';
 import { addUserAlias } from '../store/aliases';
 import { rememberPage, runFill } from './fillers';
 import { Paginator } from './Paginator';
-import { errorMessage, mergeNote, pageSortAlias, progressText } from './postsHelpers';
+import { errorMessage, hiddenByFiltersMessage, mergeNote, pageSortAlias, progressText } from './postsHelpers';
 import type { SearchPipeline } from './searchPipeline';
 import { Thumb } from './Thumb';
 
@@ -125,8 +125,10 @@ export function PostGrid({ grid, tags, linkTo = postsLink, src = '', thumbAction
   })();
 
   const progress = state ? progressText(state) : null;
-  const blacklisted = state?.rejected.blacklist ?? 0;
-  const filtered = (state?.rejected.untagged ?? 0) + (state?.rejected.orientation ?? 0);
+  // Also on 'paused': a broad search that the filters empty out usually hits the
+  // server-page limit ("Keep scanning") before the stream ends.
+  const settled = state?.phase === 'done' || state?.phase === 'paused';
+  const hiddenMessage = state && settled && state.posts.length === 0 && page === 1 && !pipeline.filtersOff ? hiddenByFiltersMessage(state.rejected) : null;
   const showPaginator = !!state && state.phase !== 'error' && (posts.length > 0 || page > 1);
 
   return (
@@ -147,15 +149,23 @@ export function PostGrid({ grid, tags, linkTo = postsLink, src = '', thumbAction
       )}
       {notice}
       {validation?.kind === 'ok' && !state && <p class="rgb-progress">Loading…</p>}
-      {state && progress && (
+      {hiddenMessage && (
+        <p class="rgb-progress">
+          {hiddenMessage}{' '}
+          <button type="button" class="link-btn" onClick={() => pipeline.setFiltersOff(true)}>Show them anyway</button>
+          {' · '}
+          <a href={hrefFor({ name: 'settings' })}>Filter settings</a>
+        </p>
+      )}
+      {pipeline.filtersOff && (
+        <p class="muted rgb-note rgb-filters-off">
+          Filters are off for this page.{' '}
+          <button type="button" class="link-btn" onClick={() => pipeline.setFiltersOff(false)}>Turn back on</button>
+        </p>
+      )}
+      {state && progress && (!hiddenMessage || state.phase === 'paused') && (
         <p class={state.phase === 'error' ? 'rgb-progress error' : 'rgb-progress'}>
           {progress}
-          {state.phase === 'done' && state.posts.length === 0 && blacklisted > 0 && (
-            <> {blacklisted} {blacklisted === 1 ? 'post was' : 'posts were'} hidden by your blacklist.</>
-          )}
-          {state.phase === 'done' && state.posts.length === 0 && filtered > 0 && (
-            <> {filtered} {filtered === 1 ? 'post was' : 'posts were'} hidden by your content filters.</>
-          )}
           {state.phase === 'paused' && <> <button type="button" onClick={grid.rescan}>Keep scanning</button></>}
           {state.phase === 'error' && <> <button type="button" onClick={grid.rescan}>Retry</button></>}
         </p>
