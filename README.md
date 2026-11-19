@@ -4,7 +4,7 @@ An e621-style booru front end for RedGifs, as a userscript. It replaces RedGifs'
 
 ## Changelog
 
-- **0.7.1**: Show filter as a dropdown; video previews on hover; explained empty pages with a show-anyway option; works with userscript managers that only provide GM.xmlHttpRequest (Firefox for Android); crash screen with settings reset; other extensions' styles are no longer removed. When filters hide everything, the page says so and offers to show them anyway.
+- **0.7.1**: Show filter as a dropdown; video previews on hover; explained empty pages with a show-anyway option; works with userscript managers that only provide GM.xmlHttpRequest (Firefox for Android); crash screen with settings reset; other extensions' styles are no longer removed.
 - **0.6.9**: Chrome fix: pages no longer stay gray (render-blocking stylesheets), and RedGifs' own login refresh is blocked so it cannot clash with the booru's.
 - **0.6.6**: "Show: any / straight / gay / trans" replaces the gender-tag filter.
 - **0.6.5**: Content filters: hide untagged posts, and posts without a gender tag (via tag implications).
